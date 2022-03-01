@@ -1,0 +1,1355 @@
+---
+title: "COVID-19 employment shock and Public Assistance"
+author: ""
+date: "`r Sys.Date()`"
+output:
+ html_document:
+    css : R_style.css
+    # theme: cosmo
+    highlight: haddock     # Rスクリプトのハイライト形式
+    code_folding: 'hide'  # Rコードの折りたたみ表示を設定
+    toc: TRUE
+    toc_depth: 3           # 見出しの表示とその深さを指定
+    toc_float: true        # 見出しを横に表示し続ける
+    number_sections: true # 見出しごとに番号を振る
+    df_print: paged        # head()の出力をnotebook的なものに（tibbleと相性良）
+    latex_engine: xelatex  # zxjatypeパッケージを使用するために変更
+    # fig_height: 4.5          # 画像サイズのデフォルトを設定
+    # fig_width: 8           # 画像サイズのデフォルトを設定
+    dev: png
+classoption: xelatex,ja=standard
+editor_options: 
+  chunk_output_type: console
+---
+# Rmd settings
+```{r setup, include=FALSE}
+Sys.setenv(LANG = "en") #English
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+path <- getwd()
+
+setwd(path)
+
+# packages
+pacman::p_load(tidyverse, plotly,readxl,scales, extrafont,PerformanceAnalytics, GGally, patchwork, ggpubr, DT, estimatr, texreg,　modelsummary)
+
+# Font for windows and mac
+if (stringr::str_detect(path, pattern="D:")){ 
+  
+  theme_set(theme_gray(base_size = 10, base_family = "Arial"))        # For Windows
+
+ } else{
+  
+  theme_set(theme_gray(base_size = 10, base_family = "HiraginoSans-W3"))  # For Mac OS
+
+ }
+```
+
+# Contents
+- covid_on_unemp_benefit_numberのOLSとWLS
+
+
+# Read functions/関数の読み込み
+```{r}
+source("functions.R")
+```
+
+
+# Read data/分析用データの読み込み
+```{r}
+df_analysis <- readr::read_csv("output/df_analysis.csv")
+```
+
+# Y=PA recipients/生活保護受給者数
+## OLS, no trends
+
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_persons_OLS_notrend")
+
+# Event study graph
+graph_hogo_persons_OLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_persons_OLS_notrend")
+
+graph_hogo_persons_OLS_notrend
+
+estimates_hogo_persons_OLS_notrend <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_persons_WLS_notrend")
+
+# Event study graph
+graph_hogo_persons_WLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_persons_WLS_notrend")
+
+graph_hogo_persons_WLS_notrend
+
+estimates_hogo_persons_WLS_notrend <- df_estimates 　 #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_persons_OLS_trend")
+
+# Event study graph
+graph_hogo_persons_OLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_persons_OLS_trend")
+
+graph_hogo_persons_OLS_trend
+
+estimates_hogo_persons_OLS_trend <- df_estimates 　 #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_persons_WLS_trend")
+
+# Event study graph
+graph_hogo_persons_WLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_persons_WLS_trend")
+
+graph_hogo_persons_WLS_trend
+
+estimates_hogo_persons_WLS_trend <- df_estimates 　 #for robustness check
+```
+
+# Y=PA recipients/生活保護受給者数 with covar
+## OLS, no trends
+
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_persons_OLS_notrend")
+
+# Event study graph
+graph_hogo_persons_OLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_persons_OLS_notrend")
+
+graph_hogo_persons_OLS_notrend_covar
+
+estimates_hogo_persons_OLS_notrend_covar <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_persons_WLS_notrend")
+
+# Event study graph
+graph_hogo_persons_WLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_persons_WLS_notrend")
+
+graph_hogo_persons_WLS_notrend_covar
+
+estimates_hogo_persons_WLS_notrend_covar <- df_estimates 　 #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_persons_OLS_trend")
+
+# Event study graph
+graph_hogo_persons_OLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_persons_OLS_trend")
+
+graph_hogo_persons_OLS_trend_covar
+
+estimates_hogo_persons_OLS_trend_covar <- df_estimates 　 #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_persons_WLS_trend")
+
+# Event study graph
+graph_hogo_persons_WLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_persons_WLS_trend")
+
+graph_hogo_persons_WLS_trend_covar
+
+estimates_hogo_persons_WLS_trend_covar <- df_estimates 　 #for robustness check
+```
+
+
+# Y=PA recipients(YOY)/生活保護受給者数（前年同月差）
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_persons_OLS_notrend")
+
+# Event study graph
+graph_yoy_hogo_persons_OLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_persons_OLS_notrend")
+
+graph_yoy_hogo_persons_OLS_notrend
+
+estimates_yoy_hogo_persons_OLS_notrend <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_persons_WLS_notrend")
+
+# Event study graph
+graph_yoy_hogo_persons_WLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_persons_WLS_notrend")
+
+graph_yoy_hogo_persons_WLS_notrend
+
+estimates_yoy_hogo_persons_WLS_notrend <- df_estimates 　 #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_persons_OLS_trend")
+
+# Event study graph
+graph_yoy_hogo_persons_OLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_persons_OLS_trend")
+
+graph_yoy_hogo_persons_OLS_trend
+
+estimates_yoy_hogo_persons_OLS_trend <- df_estimates 　 #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_persons_WLS_trend")
+
+# Event study graph
+graph_yoy_hogo_persons_WLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_persons_WLS_trend")
+
+graph_yoy_hogo_persons_WLS_trend
+
+estimates_yoy_hogo_persons_WLS_trend <- df_estimates 　 #for robustness check
+
+results_yoy_hogo_persons_WLS_trend <- estimation_results # for only-post DID table
+```
+
+## WLS, with trends, post-covid-month dummies
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_onlypost_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_persons_WLS_trend")
+
+# Event study graph
+graph_yoy_hogo_persons_WLS_trend_onlypost <- event_study_graph(data = df_estimates ,
+                                          graph_title = "yoy_hogo_persons_WLS_trend")
+
+ggplotly(graph_yoy_hogo_persons_WLS_trend_onlypost)
+
+estimates_yoy_hogo_persons_WLS_trend_onlypost <- df_estimates #for robustness check
+
+results_yoy_hogo_persons_WLS_trend_onlypost <- estimation_results # for only-post DID table
+```
+
+# Y=PA recipients(YOY)/生活保護受給者数（前年同月差）with covar
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_persons_OLS_notrend")
+
+# Event study graph
+graph_yoy_hogo_persons_OLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_persons_OLS_notrend")
+
+graph_yoy_hogo_persons_OLS_notrend_covar
+
+estimates_yoy_hogo_persons_OLS_notrend_covar <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_persons_WLS_notrend")
+
+# Event study graph
+graph_yoy_hogo_persons_WLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_persons_WLS_notrend")
+
+graph_yoy_hogo_persons_WLS_notrend_covar
+
+estimates_yoy_hogo_persons_WLS_notrend_covar <- df_estimates 　 #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_persons_OLS_trend")
+
+# Event study graph
+graph_yoy_hogo_persons_OLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_persons_OLS_trend")
+
+graph_yoy_hogo_persons_OLS_trend_covar
+
+estimates_yoy_hogo_persons_OLS_trend_covar <- df_estimates 　 #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_persons_WLS_trend")
+
+# Event study graph
+graph_yoy_hogo_persons_WLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_persons_WLS_trend")
+
+graph_yoy_hogo_persons_WLS_trend_covar
+
+estimates_yoy_hogo_persons_WLS_trend_covar <- df_estimates 　 #for robustness check
+
+results_yoy_hogo_persons_WLS_trend_covar <- estimation_results # for only-post DID table
+```
+
+## WLS, with trends, post-covid-month dummies
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_onlypost_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_persons_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_persons_WLS_trend")
+
+# Event study graph
+graph_yoy_hogo_persons_WLS_trend_covar_onlypost <- event_study_graph(data = df_estimates ,
+                                          graph_title = "yoy_hogo_persons_WLS_trend")
+
+ggplotly(graph_yoy_hogo_persons_WLS_trend_covar_onlypost)
+
+estimates_yoy_hogo_persons_WLS_trend_covar_onlypost <- df_estimates #for robustness check
+
+results_yoy_hogo_persons_WLS_trend_covar_onlypost <- estimation_results # for only-post DID table
+```
+
+# Y=PA recipient housholds/生活保護受給世帯
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_households_OLS_notrend")
+
+# Event study graph
+graph_hogo_households_OLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_households_OLS_notrend")
+
+graph_hogo_households_OLS_notrend
+
+estimates_hogo_households_OLS_notrend <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_households_WLS_notrend")
+
+# Event study graph
+graph_hogo_households_WLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_households_WLS_notrend")
+
+graph_hogo_households_WLS_notrend
+
+estimates_hogo_households_WLS_notrend <- df_estimates 　 #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_households_OLS_trend")
+
+# Event study graph
+graph_hogo_households_OLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_households_OLS_trend")
+
+graph_hogo_households_OLS_trend
+
+estimates_hogo_households_OLS_trend <- df_estimates 　 #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_households_WLS_trend")
+
+# Event study graph
+graph_hogo_households_WLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_households_WLS_trend")
+
+graph_hogo_households_WLS_trend
+
+estimates_hogo_households_WLS_trend <- df_estimates 　 #for robustness check
+```
+
+# Y=PA recipient housholds/生活保護受給世帯 with covar
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_households_OLS_notrend")
+
+# Event study graph
+graph_hogo_households_OLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_households_OLS_notrend")
+
+graph_hogo_households_OLS_notrend_covar
+
+estimates_hogo_households_OLS_notrend_covar <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_households_WLS_notrend")
+
+# Event study graph
+graph_hogo_households_WLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_households_WLS_notrend")
+
+graph_hogo_households_WLS_notrend_covar
+
+estimates_hogo_households_WLS_notrend_covar <- df_estimates 　 #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_households_OLS_trend")
+
+# Event study graph
+graph_hogo_households_OLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_households_OLS_trend")
+
+estimates_hogo_households_OLS_trend_covar <- df_estimates
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "hogo_households_WLS_trend")
+
+# Event study graph
+graph_hogo_households_WLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "hogo_households_WLS_trend")
+
+estimates_hogo_households_WLS_trend_covar <- df_estimates
+```
+
+# Y=PA recipient housholds(YOY)/生活保護受給世帯（前年同月差）
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_households_OLS_notrend")
+
+# Event study graph
+graph_yoy_hogo_households_OLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_households_OLS_notrend")
+
+graph_yoy_hogo_households_OLS_notrend
+
+estimates_yoy_hogo_households_OLS_notrend <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_households_WLS_notrend")
+
+# Event study graph
+graph_yoy_hogo_households_WLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_households_WLS_notrend")
+
+graph_yoy_hogo_households_WLS_notrend
+
+estimates_yoy_hogo_households_WLS_notrend <- df_estimates 　 #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_households_OLS_trend")
+
+# Event study graph
+graph_yoy_hogo_households_OLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_households_OLS_trend")
+
+graph_yoy_hogo_households_OLS_trend
+
+estimates_yoy_hogo_households_OLS_trend <- df_estimates 　 #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_households_WLS_trend")
+
+# Event study graph
+graph_yoy_hogo_households_WLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_households_WLS_trend")
+
+graph_yoy_hogo_households_WLS_trend
+
+estimates_yoy_hogo_households_WLS_trend <- df_estimates 　 #for robustness check
+
+results_yoy_hogo_households_WLS_trend <- estimation_results # for only-post DID table
+```
+
+## WLS, with trends, post-covid-month dummies
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_onlypost_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_households_WLS_trend")
+
+# Event study graph
+graph_yoy_hogo_households_WLS_trend_onlypost <- event_study_graph(data = df_estimates ,
+                                          graph_title = "yoy_hogo_households_WLS_trend")
+
+ggplotly(graph_yoy_hogo_households_WLS_trend_onlypost)
+
+estimates_yoy_hogo_households_WLS_trend_onlypost <- df_estimates #for robustness check
+
+results_yoy_hogo_households_WLS_trend_onlypost <- estimation_results # for only-post DID table
+```
+
+# Y=PA recipient housholds(YOY)/生活保護受給世帯（前年同月差）with covar
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_households_OLS_notrend")
+
+# Event study graph
+graph_yoy_hogo_households_OLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_households_OLS_notrend")
+
+estimates_yoy_hogo_households_OLS_notrend_covar <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_households_WLS_notrend")
+
+# Event study graph
+graph_yoy_hogo_households_WLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_households_WLS_notrend")
+
+estimates_yoy_hogo_households_WLS_notrend_covar <- df_estimates 　 #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_households_OLS_trend")
+
+# Event study graph
+graph_yoy_hogo_households_OLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_households_OLS_trend")
+
+estimates_yoy_hogo_households_OLS_trend_covar <- df_estimates 　 #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_households_WLS_trend")
+
+# Event study graph
+graph_yoy_hogo_households_WLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_hogo_households_WLS_trend")
+
+estimates_yoy_hogo_households_WLS_trend_covar <- df_estimates 　 #for robustness check
+
+results_yoy_hogo_households_WLS_trend_covar <- estimation_results # for only-post DID table
+```
+
+## WLS, with trends, post-covid-month dummies
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_onlypost_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_households_receive, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_hogo_households_WLS_trend")
+
+# Event study graph
+graph_yoy_hogo_households_WLS_trend_covar_onlypost <- event_study_graph(data = df_estimates ,
+                                          graph_title = "yoy_hogo_households_WLS_trend")
+
+ggplotly(graph_yoy_hogo_households_WLS_trend_covar_onlypost)
+
+estimates_yoy_hogo_households_WLS_trend_covar_onlypost <- df_estimates #for robustness check
+
+results_yoy_hogo_households_WLS_trend_covar_onlypost <- estimation_results # for only-post DID table
+```
+
+# Merge results for robustness graphs/アウトカム結果の結合
+## Y=PA recipients/生活保護受給者数
+```{r}
+#merge and label estimates data
+estimates_hogo_persons_bind <- dplyr::bind_rows(estimates_hogo_persons_OLS_notrend, 
+                                                estimates_hogo_persons_WLS_notrend, 
+                                                estimates_hogo_persons_OLS_trend,
+                                                estimates_hogo_persons_WLS_trend)
+
+#change labels and reorder labels
+estimates_hogo_persons_bind <- estimates_labeling_poverty(estimates_hogo_persons_bind)
+
+#graph
+graph_hogo_persons_bind <- event_study_graph_bind_main(data = estimates_hogo_persons_bind, 
+                                             graph_title = "Public Assistance recipients")
+
+ggplotly(graph_hogo_persons_bind)
+
+```
+
+## Y=PA recipients/生活保護受給者数 with covar
+```{r}
+#merge and label estimates data
+estimates_hogo_persons_bind_covar <- dplyr::bind_rows(estimates_hogo_persons_OLS_notrend_covar, 
+                                                      estimates_hogo_persons_WLS_notrend_covar, 
+                                                      estimates_hogo_persons_OLS_trend_covar,
+                                                      estimates_hogo_persons_WLS_trend_covar)
+
+#change labels and reorder labels
+estimates_hogo_persons_bind_covar <- estimates_labeling_poverty(estimates_hogo_persons_bind_covar)
+
+#graph
+graph_hogo_persons_bind_covar <- event_study_graph_bind_main(data = estimates_hogo_persons_bind_covar, 
+                                             graph_title = "Public Assistance recipients, with covariates")
+
+ggplotly(graph_hogo_persons_bind_covar)
+
+```
+
+
+## Y=PA recipients(YOY)/生活保護受給者数(対前年度差)
+```{r}
+#merge and label estimates data
+estimates_yoy_hogo_persons_bind <- dplyr::bind_rows(estimates_yoy_hogo_persons_OLS_notrend, 
+                                                    estimates_yoy_hogo_persons_WLS_notrend, 
+                                                    estimates_yoy_hogo_persons_OLS_trend,
+                                                    estimates_yoy_hogo_persons_WLS_trend)
+
+#change labels and reorder labels
+estimates_yoy_hogo_persons_bind <- estimates_labeling_poverty(estimates_yoy_hogo_persons_bind)
+
+#graph
+graph_yoy_hogo_persons_bind <- event_study_graph_bind_main(data = estimates_yoy_hogo_persons_bind, 
+                                             graph_title = "Public Assistance recipients (year-on-year)")
+
+ggplotly(graph_yoy_hogo_persons_bind)
+
+```
+
+## Y=PA recipients(YOY)/生活保護受給者数(対前年度差) with covar
+```{r}
+#merge and label estimates data
+estimates_yoy_hogo_persons_bind_covar <- dplyr::bind_rows(estimates_yoy_hogo_persons_OLS_notrend_covar, 
+                                                          estimates_yoy_hogo_persons_WLS_notrend_covar, 
+                                                          estimates_yoy_hogo_persons_OLS_trend_covar,
+                                                          estimates_yoy_hogo_persons_WLS_trend_covar)
+
+#change labels and reorder labels
+estimates_yoy_hogo_persons_bind_covar <- estimates_labeling_poverty(estimates_yoy_hogo_persons_bind_covar)
+
+#graph
+graph_yoy_hogo_persons_bind_covar <- event_study_graph_bind_main(data = estimates_yoy_hogo_persons_bind_covar, 
+                                             graph_title = "Public Assistance recipients (year-on-year), with covariates")
+
+ggplotly(graph_yoy_hogo_persons_bind_covar)
+```
+
+## Y=PA recipient housholds/生活保護受給世帯
+```{r}
+#merge and label estimates data
+estimates_hogo_households_bind <- dplyr::bind_rows(estimates_hogo_households_OLS_notrend, 
+                                                   estimates_hogo_households_WLS_notrend, 
+                                                   estimates_hogo_households_OLS_trend,
+                                                   estimates_hogo_households_WLS_trend)
+
+#change labels and reorder labels
+estimates_hogo_households_bind <- estimates_labeling_poverty(estimates_hogo_households_bind)
+
+#graph
+graph_hogo_households_bind <- event_study_graph_bind_main(data = estimates_hogo_households_bind, 
+                                             graph_title = "Public Assistance recipient households")
+
+ggplotly(graph_hogo_households_bind)
+
+```
+
+## Y=PA recipient housholds/生活保護受給世帯 with covar
+```{r}
+#merge and label estimates data
+estimates_hogo_households_bind_covar <- dplyr::bind_rows(estimates_hogo_households_OLS_notrend_covar, 
+                                                         estimates_hogo_households_WLS_notrend_covar, 
+                                                         estimates_hogo_households_OLS_trend_covar,
+                                                         estimates_hogo_households_WLS_trend_covar)
+
+#change labels and reorder labels
+estimates_hogo_households_bind_covar <- estimates_labeling_poverty(estimates_hogo_households_bind_covar)
+
+#graph
+graph_hogo_households_bind_covar <- event_study_graph_bind_main(data = estimates_hogo_households_bind_covar, 
+                                             graph_title = "Public Assistance recipient households, with covariates")
+
+ggplotly(graph_hogo_households_bind_covar)
+
+```
+
+## Y=PA recipient housholds(YOY)/生活保護受給世帯(対前年度差)
+```{r}
+#merge and label estimates data
+estimates_yoy_hogo_households_bind <- dplyr::bind_rows(estimates_yoy_hogo_households_OLS_notrend, 
+                                                       estimates_yoy_hogo_households_WLS_notrend, 
+                                                       estimates_yoy_hogo_households_OLS_trend,
+                                                       estimates_yoy_hogo_households_WLS_trend)
+
+#change labels and reorder labels
+estimates_yoy_hogo_households_bind <- estimates_labeling_poverty(estimates_yoy_hogo_households_bind)
+
+#graph
+graph_yoy_hogo_households_bind <- event_study_graph_bind_main(data = estimates_yoy_hogo_households_bind, 
+                                             graph_title = "Public Assistance recipient households (year-on-year)")
+
+ggplotly(graph_yoy_hogo_households_bind)
+```
+
+## Y=PA recipient housholds(YOY)/生活保護受給世帯(対前年度差) with covar
+```{r}
+#merge and label estimates data
+estimates_yoy_hogo_households_bind_covar <- dplyr::bind_rows(estimates_yoy_hogo_households_OLS_notrend_covar, 
+                                                             estimates_yoy_hogo_households_WLS_notrend_covar, 
+                                                             estimates_yoy_hogo_households_OLS_trend_covar,
+                                                             estimates_yoy_hogo_households_WLS_trend_covar)
+
+#change labels and reorder labels
+estimates_yoy_hogo_households_bind_covar <- estimates_labeling_poverty(estimates_yoy_hogo_households_bind_covar)
+
+#graph
+graph_yoy_hogo_households_bind_covar <- event_study_graph_bind_main(data = estimates_yoy_hogo_households_bind_covar, 
+                                             graph_title = "Public Assistance recipient households (year-on-year), with covariates")
+
+ggplotly(graph_yoy_hogo_households_bind_covar)
+
+```
+
+## GGplotly
+```{r}
+ggplotly(graph_hogo_persons_bind)
+ggplotly(graph_hogo_persons_bind_covar)
+ggplotly(graph_yoy_hogo_persons_bind)
+ggplotly(graph_yoy_hogo_persons_bind_covar)
+ggplotly(graph_hogo_households_bind)
+ggplotly(graph_hogo_households_bind_covar)
+ggplotly(graph_yoy_hogo_households_bind)
+ggplotly(graph_yoy_hogo_households_bind_covar)
+```
+
+# Merge graphs/グラフ統合
+## Extract legend/legend 取り出し
+```{r}
+#Legendの表示
+
+graph_for_legend  <-　graph_hogo_persons_bind +
+ theme(legend.position = 'bottom', # Adjust x axis label
+       legend.title = element_text(color = "black", size = 20),
+       legend.text = element_text(color = "black", size = 20))
+graph_for_legend  
+
+#extract legend
+legend_model_types <- ggpubr::get_legend(graph_for_legend)
+legend_model_types <- ggpubr::as_ggplot(legend_model_types)
+legend_model_types
+```
+
+## Merge/統合
+
+グラフを統合して論文用に保存。
+### graph size
+
+```{r}
+dpi_num <- 100
+width_num <- 15
+height_num <- 10
+```
+
+### WLS with linear trends
+```{r, fig.width = 10, fig.height = 15}
+
+ymin <- - 50
+ymax <- 150
+
+ymin_num <- - 50
+ymax_num  <- 150
+interval <- 50
+
+graph_hogo_persons_WLS_trend <- graph_hogo_persons_WLS_trend + 
+  labs(title = "(a) Public Assistance recipients") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_hogo_persons_WLS_trend_covar <- graph_hogo_persons_WLS_trend_covar + 
+  labs(title = "(b) Public Assistance recipients, with covaraites") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_hogo_households_WLS_trend <- graph_hogo_households_WLS_trend + 
+  labs(title = "(c) Public Assistance recipient households")+ 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_hogo_households_WLS_trend_covar <- graph_hogo_households_WLS_trend_covar + 
+  labs(title = "(d) Public Assistance recipient households, with covaraites") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph <- (graph_hogo_persons_WLS_trend | graph_hogo_persons_WLS_trend_covar) / 
+  (graph_hogo_households_WLS_trend | graph_hogo_households_WLS_trend_covar) 
+
+graph
+
+#保存
+ggsave(file = "output/graph_job_seeker_total_shock_on_PAbenefit_WLStrends.pdf", plot = graph, 
+       dpi = dpi_num, width = width_num, height = height_num)  
+```
+
+### WLS with linear trends (YOY)
+```{r, fig.width = 10, fig.height = 15}
+
+graph_hogo_persons_WLS_trend <- graph_yoy_hogo_persons_WLS_trend + 
+  labs(title = "(a) Recipients") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_hogo_persons_WLS_trend_covar <- graph_yoy_hogo_persons_WLS_trend_covar + 
+  labs(title = "(b) Recipients, with covaraites") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_hogo_households_WLS_trend <- graph_yoy_hogo_households_WLS_trend + 
+  labs(title = "(c) Recipient households")+ 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_hogo_households_WLS_trend_covar <- graph_yoy_hogo_households_WLS_trend_covar + 
+  labs(title = "(d) Recipient households, with covaraites") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph <- (graph_hogo_persons_WLS_trend | graph_hogo_persons_WLS_trend_covar) / 
+  (graph_hogo_households_WLS_trend | graph_hogo_households_WLS_trend_covar) 
+
+graph
+
+#保存
+ggsave(file = "output/graph_job_seeker_total_shock_on_yoy_PAbenefit_WLStrends.pdf", plot = graph, 
+       dpi = dpi_num, width = width_num, height = height_num)  
+```
+
+
+### Robustness check 
+
+```{r,fig.width = 12, fig.height = 10}
+ymin <- - 50
+ymax <- 200
+
+ymin_num <- - 50
+ymax_num  <- 200
+interval <- 50
+
+graph_hogo_persons_bind <- graph_hogo_persons_bind + labs(title = "(a) Public Assistance recipients")+ scale_y_continuous(limit = c(ymin,400), breaks=seq(ymin_num, 400, interval))
+
+graph_hogo_persons_bind_covar <- graph_hogo_persons_bind_covar + labs(title = "(b) Public Assistance recipients with covariates")+ scale_y_continuous(limit = c(ymin, 400), breaks=seq(ymin_num, 400, interval))
+
+graph_hogo_households_bind <- graph_hogo_households_bind + labs(title = "(c) Public Assistance recipient households")+ scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_hogo_households_bind_covar <- graph_hogo_households_bind_covar + labs(title = "(d) Public Assistance recipient households  with covariates")+ scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+
+graph <-  (graph_hogo_persons_bind + graph_hogo_persons_bind_covar) /
+  (graph_hogo_households_bind + graph_hogo_households_bind_covar) /
+  legend_model_types +
+  plot_layout(heights = c(2, 2, 0.5))  #0.3から0.5へ変更 2021Sep7 Waki
+ 
+graph
+
+#保存
+ggsave(file = "output/graph_job_seeker_total_shock_on_PAbenefit_robust.pdf", plot = graph, 
+       dpi = dpi_num, width = width_num, height = height_num)     
+
+```
+
+
+### Robustness check (YOY) 
+```{r,fig.width = 12, fig.height = 10}
+
+ymin <- - 50
+ymax <- 150
+
+ymin_num <- - 50
+ymax_num  <- 150
+interval <- 50
+
+graph_yoy_hogo_persons_bind <- graph_yoy_hogo_persons_bind + labs(title = "(a) Recipients")+ 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_hogo_persons_bind_covar <- graph_yoy_hogo_persons_bind_covar + labs(title = "(b) Recipients, with covariates")+ scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_hogo_households_bind <- graph_yoy_hogo_households_bind + labs(title = "(c) Recipient households ")+ scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_hogo_households_bind_covar <- graph_yoy_hogo_households_bind_covar + labs(title = "(d) Recipient households, with covariates")+ scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph <-  (graph_yoy_hogo_persons_bind + graph_yoy_hogo_persons_bind_covar) /
+  (graph_yoy_hogo_households_bind + graph_yoy_hogo_households_bind_covar) /
+  legend_model_types +
+  plot_layout(heights = c(2, 2, 0.5))  #0.3から0.5へ変更 2021Sep7 Waki
+ 
+graph
+
+#保存
+ggsave(file = "output/graph_job_seeker_total_shock_on_yoy_PAbenefit_robust.pdf", plot = graph, 
+       dpi = dpi_num, width = width_num, height = height_num)
+
+#ggplotly
+
+```
+
+# Regression table/回帰結果表 without covar
+```{r, eval = FALSE}
+options("modelsummary_format_numeric_latex" = "plain")
+
+# 列の選択 column order
+
+# 生活保護受給者、生活保護受給世帯、YOYのみ, monthlyhのみ
+
+rows_MONTH <- tribble(~name, ~"(1)", ~"(2)", ~"(3)", ~"(4)",
+"Ref. month", "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}",  "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}")
+
+## results list
+table_results_MONTH <- list()
+table_results_MONTH[["(1)"]] <- results_yoy_hogo_persons_WLS_trend
+table_results_MONTH[["(2)"]] <- results_yoy_hogo_persons_WLS_trend_onlypost
+table_results_MONTH[["(3)"]] <- results_yoy_hogo_households_WLS_trend
+table_results_MONTH[["(4)"]] <- results_yoy_hogo_households_WLS_trend_onlypost
+
+
+## HTML table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      title_words = "Hogo",
+                      gof = gm,
+                      output_style = "html") %>%
+    kableExtra::add_header_above(c(" " = 1, "Recipients" = 2, "Recipient Households" = 2))
+
+## Latex table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      gof = gm,
+                      title_words = "DID estimates for suicide rates, with covariates\\label{tab:DID_unemploy_on_suicide_covar}", 
+                      output_style = "latex") %>% 
+  kableExtra::add_header_above(c(" " = 1, "Recipients" = 2, "Recipient Households" = 2)) %>%
+  kableExtra::add_footnote(c("Notes: Robust standard errors are clustered at the prefecture level and the number of clusters (i.e. prefectures) is 47. The treatment variable is the COVID-19-induced employment shock, which is calculated as equation \\eqref{eq:employment_shock}. Estimates are obtained based on equation \\eqref{eq:did_model_ver2} with WLS estimation weighted by prefecture population size."),threeparttable = TRUE, notation = "none",escape = FALSE) %>% 
+  kableExtra::column_spec(2:7, width = "1.5cm") %>% 
+  kableExtra::save_kable("output/job_seeker_total_shock_on_PAbenefit_robust_tables.tex")
+```
+
+
+# Regression table/回帰結果表 with covar
+
+```{r, eval = FALSE}
+# 列の選択 column order
+
+# 生活保護受給者、生活保護受給世帯、YOYのみ, monthlyhのみ
+
+rows_MONTH <- tribble(~name, ~"(1)", ~"(2)", ~"(3)", ~"(4)",
+"Ref. month", "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}",  "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}")
+
+## results list
+table_results_MONTH <- list()
+table_results_MONTH[["(1)"]] <- results_yoy_hogo_persons_WLS_trend_covar
+table_results_MONTH[["(2)"]] <- results_yoy_hogo_persons_WLS_trend_covar_onlypost
+table_results_MONTH[["(3)"]] <- results_yoy_hogo_households_WLS_trend_covar
+table_results_MONTH[["(4)"]] <- results_yoy_hogo_households_WLS_trend_covar_onlypost
+
+
+## HTML table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      title_words = "Hogo",
+                      gof = gm,
+                      output_style = "html") %>%
+    kableExtra::add_header_above(c(" " = 1, "Recipients" = 2, "Recipient Households" = 2))
+
+## Latex table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      gof = gm,
+                      title_words = "DID estimates for suicide rates, with covariates\\label{tab:DID_unemploy_on_suicide_covar}", 
+                      output_style = "latex") %>% 
+  kableExtra::add_header_above(c(" " = 1, "Recipients" = 2, "Recipient Households" = 2)) %>%
+  kableExtra::add_footnote(c("Notes: Robust standard errors are clustered at the prefecture level and the number of clusters (i.e. prefectures) is 47. The treatment variable is the COVID-19-induced employment shock, which is calculated as equation \\eqref{eq:employment_shock}. Estimates are obtained based on equation \\eqref{eq:did_model_ver2} with WLS estimation weighted by prefecture population size."),threeparttable = TRUE, notation = "none",escape = FALSE) %>% 
+  kableExtra::column_spec(2:7, width = "1.5cm") %>% 
+  kableExtra::save_kable("output/job_seeker_total_shock_on_PAbenefit_robust_covar_tables.tex")
+```
+
+
+
+

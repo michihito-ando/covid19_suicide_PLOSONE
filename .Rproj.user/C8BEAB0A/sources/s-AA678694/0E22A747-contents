@@ -1,0 +1,577 @@
+---
+title: "household_benefits_covid19"
+author: ""
+date: "`r Sys.Date()`"
+output:
+ html_document:
+    css : R_style.css
+    # theme: cosmo
+    highlight: haddock     # Rスクリプトのハイライト形式
+    code_folding: 'hide'  # Rコードの折りたたみ表示を設定
+    toc: TRUE
+    toc_depth: 3           # 見出しの表示とその深さを指定
+    toc_float: true        # 見出しを横に表示し続ける
+    number_sections: true # 見出しごとに番号を振る
+    df_print: paged        # head()の出力をnotebook的なものに（tibbleと相性良）
+    latex_engine: xelatex  # zxjatypeパッケージを使用するために変更
+    # fig_height: 4.5          # 画像サイズのデフォルトを設定
+    # fig_width: 8           # 画像サイズのデフォルトを設定
+    dev: png
+classoption: xelatex,ja=standard
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup}
+Sys.setenv(LANG = "en") #English
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+path <- getwd()
+
+setwd(path)
+
+# packages
+pacman::p_load(tidyverse, patchwork, plotly)
+
+# Font for windows and mac
+if (stringr::str_detect(path, pattern="Users")){ 
+  
+   theme_set(theme_classic(base_size = 10, base_family = "HiraginoSans-W3"))  # For Mac OS
+
+ } else{
+  
+theme_set(theme_classic(base_size = 10, base_family = "Arial")) # For Windows
+ }       
+
+options(scipen=10)
+
+# annotation size
+annotate_size <- 3
+```
+
+# Data and anntation setting
+
+```{r}
+# 2021Feb02
+graphs_data <- readr::read_csv("output/time_series_data.csv")
+
+# graphs_data <- graphs_data %>% 
+#   dplyr::rename(hogo_persons_total = persons_total,
+#                 hogo_households_total = households_total)
+
+graphs_data <- graphs_data %>% dplyr::filter(date >= "2019-01-01" & date <= "2020-09-01")
+```
+
+# Employment rate and LFP/就業率と労働参加率
+
+```{r}
+emp_labor <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y = employment_rate, group= 1),
+           stat = "identity", position = "identity", color = "gray30") + 
+  geom_line(aes(x = year_month,y = labor_participation_rate, group = 1), 
+             stat = "identity",position = "identity", color = "blue") +
+  scale_y_continuous(breaks = seq(58,63,by = 1), limits = c(58,63)) +
+  geom_vline(xintercept = "2020-01", colour = "gray") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(plot.title = element_text(size = 10)) +
+   labs(title = "(a) Employment and labor force") + 
+    annotate(geom="text", x = "2019-05", y  = 61.2,
+             label = "Employment rate", size = annotate_size, color = "gray30") +
+ annotate(geom = "text", x = "2019-07", y  = 62.8,
+             label = "Labor force participation rate", size = annotate_size, color = "blue" ) 
+
+emp_labor <- emp_labor + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+emp_labor
+
+
+ggplotly(emp_labor)
+```
+
+# Unemployment rate and jobs-to-applicants ratio/失業率と有効求人倍率
+
+```{r}
+# graph
+unemp_jobapps <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y = unemployment_rate,  group = 1),
+           stat = "identity", position = "identity", color = "blue") + 
+  geom_line(aes(x = year_month,y = jobs_to_applicants_ratio,  group = 1), 
+             stat = "identity",position = "identity", color = "gray30") +
+  labs(title = "(b) Unemployment and jobs-to-applicants ratio", size = 0.4) +
+  geom_vline(xintercept =  "2020-01",colour = "gray") +
+  scale_y_continuous(expand = c(0,0),breaks = seq(0,3.5,by = 0.5), limits = c(0, 3.5)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank())+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0)) +
+  theme(plot.title = element_text(size = 10)) +
+  annotate(geom = "text", x = "2019-05", y = 2.7, label = "Unemployment rate", 
+           size = annotate_size,color = "blue") +
+  #annotate("segment", x = "2020-06", y = 3.0,
+  #           xend =  "2020-06", yend  = 3.2,
+  #           arrow = arrow(length = unit(0, "cm"), type = "closed")) +
+  annotate(geom = "text", x= "2019-05", y =1.8,
+             label=" Jobs-to-applicants ratio", size = annotate_size , color = "gray30") 
+  #annotate("segment", x =  "2020-06", y = 1.0,
+  #           xend =  "2020-06", yend  = 0.8,
+  #           arrow = arrow(length = unit(0, "cm"), type = "closed"))
+
+unemp_jobapps <- unemp_jobapps + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+unemp_jobapps
+
+ggplotly(unemp_jobapps)
+```
+
+# Suicide/自殺者数
+
+```{r}
+suicide <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y = suicide_total, group = 1),
+           stat = "identity", position = "identity", color = "blue") + 
+  geom_line(aes(x = year_month, y = suicide_female, group = 1), 
+             stat = "identity", position = "identity", color = "gray30") +
+   geom_line(aes(x = year_month, y = suicide_male, group = 1), 
+             stat = "identity",position = "identity", color = "brown") +
+  scale_y_continuous(breaks = seq(0,2000,by = 500), limits = c(0,2000)) +
+  geom_vline(xintercept =  "2020-01", colour = "gray") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0)) +
+  theme(plot.title = element_text(size = 10)) +
+   labs(title = "(c) The number of suicides") +
+  annotate(geom = "text", x = "2019-02", y = 1800,
+             label = "Total", size = annotate_size, color = "blue") +
+  annotate(geom = "text", x = "2019-02", y  = 630,
+             label = "Women", size = annotate_size, color = "gray30" ) +
+annotate(geom = "text", x = "2019-02", y = 1300,
+             label = "Men", size = annotate_size, color = "brown" ) 
+  
+suicide <- suicide + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+suicide
+
+ggplotly(suicide)
+```
+
+# Suicide(YOY)/自殺者数(対前年同期差)
+
+```{r}
+yoy_suicide <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y = yoy_suicide_total, group = 1),
+           stat = "identity", position = "identity", color = "blue") + 
+  geom_line(aes(x = year_month, y =  yoy_suicide_female, group = 1), 
+             stat = "identity", position = "identity", color = "gray30") +
+   geom_line(aes(x = year_month, y =  yoy_suicide_male, group = 1), 
+             stat = "identity",position = "identity", color = "brown") +
+  scale_y_continuous(breaks = seq(-400, 400,by = 100), limits = c(-400,400)) + #2021Aug13  ylim -300 → -350
+  geom_vline(xintercept =  "2020-01", colour = "gray") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(plot.title = element_text(size = 10)) +
+   labs(title = "(d) The number of suicides (year-on-year)") +
+  annotate(geom = "text", x = "2020-07", y = 370,
+             label = "Total", size = annotate_size , color = "blue") +
+  annotate(geom = "text", x = "2020-03", y = 50,
+             label = "Women", size = annotate_size, color = "gray30" ) +
+  annotate(geom = "text", x = "2020-08", y = -40,
+             label = "Men", size = annotate_size, color = "brown")  
+
+yoy_suicide <- yoy_suicide + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+yoy_suicide
+
+ggplotly(yoy_suicide)
+```
+
+# Public assistance/生活保護
+
+## Recipients and recipients households/受給者数と受給世帯数
+
+```{r}
+public_assistance <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y = persons_receive_zenkoku, group = 1),
+           stat = "identity", position = "identity", color = "blue") + 
+  geom_line(aes(x = year_month, y =  households_receive_zenkoku, group = 1),
+            stat = "identity", position = "identity", color = "gray30") +
+  scale_y_continuous(breaks = seq(1500000, 2100000, by = 100000), limits = c(1500000, 2100000)) +
+  geom_vline(xintercept =  "2020-01", colour = "gray") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(plot.title = element_text(size = 10)) +
+   labs(title = "(g) Public Assistance recipients and recipient households") +
+  annotate(geom = "text", x = "2019-02", y = 2000000, hjust = 0,
+             label = "Public Assistance recipients", size = annotate_size , color = "blue") +
+  annotate(geom = "text", x = "2019-02", y = 1700000,  hjust = 0,
+            label = "Public Assistance recipient households", size = annotate_size, color = "gray30" )
+  #annotate(geom = "text", x = "2020-08", y = -70,
+  #           label = "Men", size = annotate_size, color = "brown")  
+
+public_assistance <- public_assistance + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+public_assistance
+
+ggplotly(public_assistance)
+```
+
+## Recipients and recipients households(YOY)/受給者数と受給世帯数(YOY)
+
+```{r}
+public_assistance_yoy <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y = yoy_persons_receive_zenkoku, group = 1),
+           stat = "identity", position = "identity", color = "blue") + 
+  geom_line(aes(x = year_month, y =  yoy_households_receive_zenkoku, group = 1),
+            stat = "identity", position = "identity", color = "gray30")+
+  scale_y_continuous(breaks = seq(-30000, 3000, by = 10000), limits = c(-30000, 3000)) +
+  geom_vline(xintercept =  "2020-01", colour = "gray") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(plot.title = element_text(size = 10)) +
+  labs(title = "(g) Public Assistance recipients and recipient households (year-on-year)") +
+  annotate(geom = "text", x = "2019-08", y = -17000, hjust = 0,
+             label = "Public Assistance recipients", size = annotate_size , color = "blue") +
+  annotate(geom = "text", x = "2019-08", y = 2000,  hjust = 0,
+            label = "Public Assistance recipient households", size = annotate_size, color = "gray30" )
+
+public_assistance_yoy <- public_assistance_yoy + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+public_assistance_yoy
+
+ggplotly(public_assistance_yoy)
+```
+
+## Recipient households by hosehold type/世帯類型別の受給世帯数
+
+```{r}
+YOY_public_assistance <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y = yoy_households_receive_elderly_zenkoku, group = 1),
+           stat = "identity", position = "identity", color = "blue") + 
+  geom_line(aes(x = year_month, y =  yoy_households_receive_singlemother_zenkoku, group = 1),
+            stat = "identity", position = "identity", color = "gray30",linetype="dashed") +
+  geom_line(aes(x = year_month, y =  yoy_households_receive_disabled_zenkoku, group = 1),
+            stat = "identity", position = "identity", color = "brown") +
+  geom_line(aes(x = year_month, y =  yoy_households_receive_sick_zenkoku, group = 1),
+            stat = "identity", position = "identity", color = "red") +
+  geom_line(aes(x = year_month, y =  yoy_households_receive_others_zenkoku, group = 1)) +
+   labs(title = "(h) Public Assistance recipient households by type (year-on-year)") +
+   scale_y_continuous(limits = c(-12000,20000)) +
+  geom_vline(xintercept =  "2020-01", colour = "gray") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(plot.title = element_text(size = 10)) +
+  annotate(geom = "text", x = "2019-04", y = 14000, hjust = 0,
+            label = "The elderly", size = annotate_size , color = "blue") +
+  annotate(geom = "text", x = "2019-04", y = 6000, hjust = 0,
+            label = "The disabled", size = annotate_size , color = "brown") +
+  annotate(geom = "text", x = "2019-05", y = -3000, hjust = 0,
+            label = "Single mothers", size = annotate_size , color = "gray30") +
+  annotate(geom = "text", x = "2020-02", y = 0, hjust = 0,
+            label = "Others", size = annotate_size , color = "black") +
+  annotate(geom = "text", x = "2020-04", y = -10000, hjust = 0,
+            label = "The sick", size = annotate_size , color = "red") 
+
+YOY_public_assistance <- YOY_public_assistance + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+YOY_public_assistance
+
+ggplotly(YOY_public_assistance)
+```
+
+# 2nd-tier programs/緊急小口と総合支援と住居確保給付金
+
+## Emergency SA Funds and General Support Funds/緊急小口と総合支援
+
+```{r}
+# 2020Jan29
+poverty_programs <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y =  koguchi_number, group = 1), 
+             stat = "identity", position = "identity", color = "blue") +
+  geom_line(aes(x = year_month, y =  sogo_number, group = 1), 
+             stat = "identity", position = "identity", color = "gray30") +
+  #scale_y_continuous(breaks = seq(-300, 350,by = 100), limits = c(-300,350)) +
+  scale_y_continuous(limits = c(0,200000)) +
+  geom_vline(xintercept =  "2020-01", colour = "gray") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(plot.title = element_text(size = 10)) +
+   labs(title = "(f) Accepted applications for emergency loans") +
+  annotate(geom = "text", x = "2020-02", y = 150000,　hjust = 1,
+             label = "Emergency Small Ammount Funds", size = annotate_size, color = "blue" ) +
+  annotate(geom = "text", x = "2020-02", y = 75000,　hjust = 1,
+             label = "General Support Funds", size = annotate_size, color = "gray30" ) 
+ 
+poverty_programs <- poverty_programs + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+poverty_programs
+
+ggplotly(poverty_programs)
+```
+
+## Housing Security Benefit/住居確保給付金
+
+```{r}
+# 2020Jan29
+jukyo_number <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y = jukyo_number, group = 1),
+           stat = "identity", position = "identity", color = "blue") + 
+  #scale_y_continuous(breaks = seq(-300, 350,by = 100), limits = c(-300,350)) +
+  geom_vline(xintercept =  "2020-01", colour = "gray30") +
+    scale_y_continuous(limits = c(0,40000)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(plot.title = element_text(size = 10)) +
+   labs(title = "(g) Accepted applications for Housing Security Benefit") +
+  annotate(geom = "text", x = "2019-09", y = 20000,
+             label = "Housing Security Benefit", size = annotate_size , color = "blue")
+ 
+jukyo_number <- jukyo_number + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+jukyo_number
+
+ggplotly(jukyo_number)
+```
+
+## 2nd-tier progrms/緊急小口・総合支援・住居確保
+
+```{r}
+# 2020Jan29
+safety_net <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y =  koguchi_number, group = 1), 
+             stat = "identity", position = "identity", color = "blue") +
+  geom_line(aes(x = year_month, y =  sogo_number, group = 1), 
+             stat = "identity", position = "identity", color = "gray30") +
+  geom_line(aes(x = year_month, y = jukyo_number, group = 1),
+           stat = "identity", position = "identity", color = "brown") + 
+  geom_vline(xintercept =  "2020-01", colour = "gray") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  theme(plot.title = element_text(size = 10)) +
+   scale_y_continuous(limits = c(0,200000)) +
+  labs(title = " (f) Accepted applications for second-tier safety net programs") +
+  annotate(geom = "text", x = "2020-03", y = 150000,　hjust = 1,
+             label = "Emergency Small Ammount Funds", size = annotate_size, color = "blue" ) +  
+  annotate(geom = "text", x = "2020-03", y = 75000,　hjust = 1,
+             label = "General Support Funds", size = annotate_size, color = "gray30" )  +
+  annotate(geom = "text", x = "2020-03", y = 20000, hjust = 1,
+             label = "Housing Security Benefit", size = annotate_size , color = "brown") 
+ 
+safety_net <- safety_net + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+safety_net
+
+ggplotly(safety_net)
+```
+
+# Unemployment benefit/失業給付
+
+失業等給付の基本手当 ![](image.png "失業等給付の基本手当")
+
+## Recipients/失業給付受給者実人数
+
+```{r}
+unemp_benefit_number <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y = unemp_benefit_number_total, group = 1),
+           stat = "identity", position = "identity", color = "blue") + 
+  geom_line(aes(x = year_month, y = unemp_benefit_number_female, group = 1), 
+             stat = "identity", position = "identity", color = "gray30") +
+   geom_line(aes(x = year_month, y = unemp_benefit_number_male, group = 1), 
+             stat = "identity",position = "identity", color = "brown") +
+  geom_vline(xintercept =  "2020-01", colour = "gray") +
+  scale_y_continuous(limits = c(0,600000)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0)) +
+  theme(plot.title = element_text(size = 10)) +
+   labs(title = "(e) Unemployment Benefit recipients") +
+  annotate(geom = "text", x = "2019-02", y = 400000,
+             label = "Total", size = annotate_size, color = "blue") +
+  annotate(geom = "text", x = "2019-02", y  = 250000,
+             label = "Women", size = annotate_size, color = "gray30" ) +
+  annotate(geom = "text", x = "2019-02", y = 100000,
+             label = "Men", size = annotate_size, color = "brown" ) 
+
+unemp_benefit_number <- unemp_benefit_number + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+unemp_benefit_number 
+
+ggplotly(unemp_benefit_number)
+```
+
+## Recipients(YOY)/失業給付受給者実人数(YOY)
+
+```{r}
+yoy_unemp_benefit_number <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y = yoy_unemp_benefit_number_total, group = 1),
+           stat = "identity", position = "identity", color = "blue") + 
+  geom_line(aes(x = year_month, y = yoy_unemp_benefit_number_female, group = 1), 
+             stat = "identity", position = "identity", color = "gray30") +
+   geom_line(aes(x = year_month, y = yoy_unemp_benefit_number_male, group = 1), 
+             stat = "identity",position = "identity", color = "brown") +
+  geom_vline(xintercept =  "2020-01", colour = "gray") +
+  #scale_y_continuous(limits = c(0,600000)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0)) +
+  theme(plot.title = element_text(size = 10)) +
+   labs(title = "(e) Unemployment Benefit recipients (year-on-year)") +
+  annotate(geom = "text", x = "2020-05", y = 100000,
+              label = "Total", size = annotate_size, color = "blue") +
+  annotate(geom = "text", x = "2020-07", y  = 15000,
+              label = "Women", size = annotate_size, color = "gray30" ) +
+  annotate(geom = "text", x = "2020-07", y = 70000,
+              label = "Men", size = annotate_size, color = "brown" ) 
+
+yoy_unemp_benefit_number <- yoy_unemp_benefit_number + 
+  geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+yoy_unemp_benefit_number 
+
+ggplotly(yoy_unemp_benefit_number)
+```
+
+
+## Benefit amounts/失業給付支給金額
+
+- Not used in the paper
+
+```{r}
+unemp_benefit_yen <- ggplot(data = graphs_data) +  
+  geom_line(aes(x = year_month, y = unemp_benefit_yen_total, group = 1),
+           stat = "identity", position = "identity", color = "blue") + 
+  geom_line(aes(x = year_month, y = unemp_benefit_yen_female, group = 1), 
+             stat = "identity", position = "identity", color = "gray30") +
+   geom_line(aes(x = year_month, y = unemp_benefit_yen_male, group = 1), 
+             stat = "identity",position = "identity", color = "brown") +
+  geom_vline(xintercept =  "2020-01", colour = "gray") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0)) +
+  theme(plot.title = element_text(size = 10)) +
+   labs(title = "The amount of unempolyment benefits") +
+  annotate(geom = "text", x = "2019-02", y = 50000000000,
+             label = "Total", size = annotate_size, color = "blue") +
+  annotate(geom = "text", x = "2019-02", y  = 30000000000,
+             label = "Women", size = annotate_size, color = "gray30" ) +
+  annotate(geom = "text", x = "2019-02", y = 15000000000,
+             label = "Men", size = annotate_size, color = "brown" ) 
+  
+unemp_benefit_yen　<- unemp_benefit_yen + geom_rect(aes(xmin="2020-04",xmax="2020-06", ymin = -Inf, ymax = Inf), # 2021Aug17  網掛け追加
+                   fill = "gray70", alpha = 0.01)
+
+unemp_benefit_yen
+
+ggplotly(unemp_benefit_yen)
+```
+
+# Merge graphs/グラフ統合
+
+```{r,fig.width = 15, fig.height = 25}
+# 2020Jan29
+# Use patchwork
+
+g <- (emp_labor + unemp_jobapps) / (suicide + yoy_suicide) / 
+ (unemp_benefit_number + safety_net)/ (public_assistance + YOY_public_assistance)
+
+g
+```
+
+```{r,fig.width = 15, fig.height = 25}
+# 2020Jan29
+# Use patchwork
+g_updated_UB_level_ver <- (emp_labor + unemp_jobapps) / (suicide + yoy_suicide) / 
+ (unemp_benefit_number + safety_net)/ (public_assistance_yoy + YOY_public_assistance)
+
+g_updated_UB_level_ver
+```
+
+```{r}
+# 2021Nov4 
+# Use patchwork
+g_updated <- (emp_labor + unemp_jobapps) / (suicide + yoy_suicide) / 
+ (yoy_unemp_benefit_number + safety_net)/ (public_assistance_yoy + YOY_public_assistance)
+
+g_updated
+
+```
+
+
+```{r}
+# 2021Aug13 
+
+# Font for windows and mac
+if(stringr::str_detect(path, pattern="D:")){ 
+  
+ggplot2::ggsave(file = "output/graphs_time_series.pdf",  plot = g, dpi = 100, width = 10, height = 12)
+
+ } else{
+  # for mac (ggsaveで出力できず)
+  # pngで出力
+quartz(file = "output/graphs_time_series.pdf", family = "sans", type = "pdf",
+       width = 12, height = 14)
+print(g)
+dev.off()
+
+ }
+
+#if(stringr::str_detect(path, pattern="/Users")){
+  # for mac (ggsaveで出力できず)
+# pngで出力
+#quartz(file = "graphs_time_series.pdf", family = "sans", type = "pdf",
+#       width = 12, height = 14)
+#print(g)
+#dev.off()
+#}else{
+  # for windows
+# pngで出力
+#ggplot2::ggsave(file = "graphs_time_series.pdf", dpi = 300, width = 10, height = 12, plot = g)
+
+#ggplot2::ggsave(file = "graphs_time_series.pdf",  plot = g, dpi = 100, width = 10, height = 12)
+#}
+```
+
+Used in the paper
+```{r}
+# 2021NOv4 
+if(stringr::str_detect(path, pattern="/Users")){
+# for mac (ggsaveで出力できず)
+# pngで出力
+quartz(file = "output/graphs_time_series_updated.pdf", family = "sans", type = "pdf",
+       width = 12, height = 14)
+print(g_updated)
+dev.off()
+}else{
+  # for windows
+
+ggplot2::ggsave(file = "output/graphs_time_series_updated.pdf",  plot = g_updated, dpi = 100, width = 10, height = 12)
+}
+```
+
+Not used in the paper 
+
+```{r}
+# 2021Aug13 
+if(stringr::str_detect(path, pattern="/Users")){
+  # for mac (ggsaveで出力できず)
+# pngで出力
+quartz(file = "output/graphs_time_series_updated_UB_level_ver.pdf", family = "sans", type = "pdf",
+       width = 12, height = 14)
+print(g_updated_UB_level_ver)
+dev.off()
+}else{
+  # for windows
+  
+ggplot2::ggsave(file = "output/graphs_time_series_updated_UB_level_ver.pdf",  plot = g_updated_UB_level_ver, dpi = 100, width = 10, height = 12)
+}
+```
+

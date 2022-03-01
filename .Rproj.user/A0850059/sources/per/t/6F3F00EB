@@ -1,0 +1,29 @@
+{
+    "id": "6F3F00EB",
+    "path": "D:/Dropbox/2020COVID_impact_R/R_for_web/preprocess_main.Rmd",
+    "project_path": "preprocess_main.Rmd",
+    "type": "r_markdown",
+    "hash": "4106354539",
+    "contents": "",
+    "dirty": false,
+    "created": 1642570133616.0,
+    "source_on_save": false,
+    "relative_order": 2,
+    "properties": {
+        "chunk_output_type": "console",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "1294,0",
+        "scrollLine": "1230",
+        "docOutlineVisible": "1",
+        "docOutlineSize": "231"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1642676666,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1642676666,
+    "read_only": false,
+    "read_only_alternatives": []
+}

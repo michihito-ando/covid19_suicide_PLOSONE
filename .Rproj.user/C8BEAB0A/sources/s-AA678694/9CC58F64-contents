@@ -1,0 +1,257 @@
+---
+title: "treatment_shock_factors"
+author: ""
+date: "`r Sys.Date()`"
+output:
+ html_document:
+    css : R_style.css
+    # theme: cosmo
+    highlight: haddock     # Rスクリプトのハイライト形式
+    code_folding: 'hide'  # Rコードの折りたたみ表示を設定
+    toc: TRUE
+    toc_depth: 3           # 見出しの表示とその深さを指定
+    toc_float: true        # 見出しを横に表示し続ける
+    number_sections: true # 見出しごとに番号を振る
+    df_print: paged        # head()の出力をnotebook的なものに（tibbleと相性良い）
+    latex_engine: xelatex  # zxjatypeパッケージを使用するために変更
+    # fig_height: 4.5          # 画像サイズのデフォルトを設定
+    # fig_width: 8           # 画像サイズのデフォルトを設定
+    dev: png
+classoption: xelatex,ja=standard
+editor_options: 
+  chunk_output_type: console
+---
+# Rmd Settings
+```{r setup}
+Sys.setenv(LANG = "en") #English
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+path <- getwd()
+
+setwd(path)
+
+# packages
+pacman::p_load(tidyverse, patchwork, plotly)
+
+# Font for windows and mac
+if (stringr::str_detect(path, pattern="Users")){ 
+  
+   theme_set(theme_classic(base_size = 10, base_family = "HiraginoSans-W3"))  # For Mac OS
+
+ } else{
+  
+theme_set(theme_classic(base_size = 10, base_family = "Arial")) # For Windows
+ }       
+
+
+options(scipen=10)
+
+# annotation size
+annotate_size <- 3
+```
+
+# Contents
+失業率ショック、有効求人倍ショック、就業率ショックの地域差の性質や規定要因を検証するために、「統計でみる都道府県のすがた」の人口・世帯、経済基盤、労働、居住（の一部）のデータを用いて、これらの変数がどの程度、雇用ショックと相関しているのかを探索的に分析する。
+重回帰は、vifの計算のためにlm_robustではなくてlmを使用している。
+
+# Read data/分析用データの読み込み
+## 「統計でみる都道府県のすがた」データの読み込み
+
+A 人口・世帯、C　経済基盤、F　労働のデータ
+https://www.e-stat.go.jp/stat-search/files?page=1&layout=datalist&toukei=00200502&tstat=000001149949&cycle=0&year=20210&month=0&tclass1=000001149950&tclass2val=0
+
+居住
+https://www.e-stat.go.jp/stat-search/files?page=1&layout=datalist&toukei=00200502&tstat=000001149949&cycle=0&tclass1=000001149950&cycle_facet=cycle&tclass2val=0
+
+
+```{r}
+# 社会人口統計体系 
+#統計でみる都道府県のすがた2021
+# A 人口・世帯、C　経済基盤、F　労働のデータ
+#https://www.e-stat.go.jp/stat-search/files?page=1&layout=datalist&toukei=00200502&tstat=000001149949&cycle=0&year=20210&month=0&tclass1=000001149950&tclass2val=0
+
+#統計でみる都道府県のすがた2021
+# 居住
+#https://www.e-stat.go.jp/stat-search/files?page=1&layout=datalist&toukei=00200502&tstat=000001149949&cycle=0&tclass1=000001149950&cycle_facet=cycle&tclass2val=0
+
+#社会人口統計体系 (2021)
+#Population_per_1_km_2_of_inhabitable_area  = 総人口/可住地面積
+## 可住地面積　＝　総面積−森林面積
+### 可住地面積の収書は以下のいずれか
+### 全国都道府県市区町村調・世界農林業センサス・農林業センサス
+
+#Ratio_of_aged_population 人口推計 2019年10月1日現在人口推計
+#Total_population 人口推計 2019年10月1日現在人口推計
+
+
+# エクセルでデータを編集
+Social_Demographic_Stat <- readxl::read_excel("input/social_demographic_stat.xlsx")
+```
+
+## Read Census data/「国勢調査」データの読み込み
+国勢調査 平成27年国勢調査 最終報告書「日本の人口・世帯」統計表 	表番号	25 	
+産業（大分類），男女別15歳以上就業者数－全国，都道府県（平成27年）
+https://www.e-stat.go.jp/dbview?sid=0003411533
+### Read data/データの読み込み
+```{r}
+census_Industrial_Classification_Population <- readr::read_csv("input/census_Industrial_Classification_Population.csv", locale=locale(encoding="CP932"))
+```
+
+### Englishizing and extracting variables/変数名の英語化と使用する変数の抽出
+```{r}
+census_Industrial_Classification_Population <- census_Industrial_Classification_Population %>% 
+  dplyr::rename("prefec_kanji"="地域2015",
+                "Total_pop"="総数", # 総人口ではなく総従業員数である点に注意
+                "Manufacturing" = "Ｅ製造業", 
+                "Wholesale_Retail_trade"="Ｉ卸売業，小売業",
+                "Accomodations_eating_drinking_services" = "Ｍ宿泊業，飲食サービス業" ,
+                "Living_related_personal_services_amusement_services" ="Ｎ生活関連サービス業，娯楽業",
+                "Secondary_industry"="（再掲）第２次産業" ,
+                "Tertiary_industry"="（再掲）第３次産業" )
+
+census_Industrial_Classification_Population <- census_Industrial_Classification_Population %>% 
+  dplyr::select(prefec_kanji, Total_pop, Manufacturing, Wholesale_Retail_trade, Accomodations_eating_drinking_services, Living_related_personal_services_amusement_services, Secondary_industry, Tertiary_industry)
+```
+
+### Making a Ratio Variable/比率変数の作成
+```{r}
+census_Industrial_Classification_Population <- census_Industrial_Classification_Population %>% 
+  dplyr::mutate(Manufacturing_ratio = Manufacturing/Total_pop) %>% 
+  dplyr::mutate(Wholesale_Retail_trade_ratio = Wholesale_Retail_trade/Total_pop) %>% 
+  dplyr::mutate(Accomodations_eating_drinking_services_ratio = Accomodations_eating_drinking_services/Total_pop) %>% 
+  dplyr::mutate(Living_related_personal_services_amusement_services_ratio = Living_related_personal_services_amusement_services/Total_pop) %>% 
+  dplyr::mutate(Secondary_industry_ratio = Secondary_industry/Total_pop) %>% 
+  dplyr::mutate(Tertiary_industry_ratio = Tertiary_industry/Total_pop)
+```
+
+国勢調査 平成27年国勢調査 就業状態等基本集計（労働力状態，就業者の産業･職業など） 表番号00320 表題従業上の地位(8区分)，男女別15歳以上就業者数
+https://www.e-stat.go.jp/dbview?sid=0003174863
+
+### Read data/データの読み込み
+- To read statistics names in Japanese is unstable, hence skip the first two lines and col_name=FALSE  / 日本語統計名の変数名としての読み込みは不安定であるため、最初の2行は飛ばして、col_names=FALSEで読み込み
+- See the following table of statistics names in Japanese to check corresponding statistics names in Japanese / 日本語統計名と英語変数名の対応については、下記の日本語統計名の表を合わせて参照
+```{r}
+#2022Jan24
+#国勢調査(2015)
+#Secondary_industry_ratio ＝（再掲）第２次産業/総数 (単位人)
+#Tertiary_industry_ratio＝（再掲）第３次産業/総数 (単位人)
+
+employment_status_survey <- readr::read_csv("input/employment_status_survey.csv", locale = locale(encoding = "SHIFT-JIS"), 
+    skip = 2, col_names = FALSE)
+```
+
+### Englishizing and extracting variables/変数の英語化と使用する変数の抽出
+```{r}
+#2022Jan24
+employment_status_survey <- employment_status_survey %>% 
+  dplyr::rename("prefec_kanji"="X3",
+                "Total_employees" = "X5",
+                "Temporary_staff_Total_employees" = "X8",
+                "Part_time_job_Total_employees" = "X9",
+                "Total_employees_male" =  "X16"  ,                          
+                "Temporary_staff_male"= "X19" ,          
+                "Part_time_job_male"= "X20"  ,
+                "Total_employees_female" ="X27",                        
+                "Temporary_staff_female"= "X30",           
+                "Part_time_job_female"= "X31")
+
+employment_status_survey <- employment_status_survey %>% 
+  dplyr::select(prefec_kanji,Total_employees,Temporary_staff_Total_employees,Part_time_job_Total_employees,Total_employees_male,Temporary_staff_male,
+               Part_time_job_male,Total_employees_female,Temporary_staff_female,Part_time_job_female)
+```
+
+### Statistics names in Japan/日本語統計名
+```{r}
+#2022Jan24
+variable_name_table <- readr::read_csv("input/employment_status_survey.csv", 
+    col_names = FALSE, locale = locale(encoding = "SHIFT-JIS"))
+
+variable_name_table[1:2,]
+```
+
+### Making a Ratio Variable/比率変数の作成
+```{r}
+employment_status_survey <- employment_status_survey %>% 
+  dplyr::mutate(Part_time_job_Temporary_staff_Total_employees_ratio = (Part_time_job_Total_employees +  Temporary_staff_Total_employees)/Total_employees) %>% 
+    dplyr::mutate(Part_time_job_Temporary_staff_employees_male_ratio = (Part_time_job_male +  Temporary_staff_male)/Total_employees_male) %>% 
+    dplyr::mutate(Part_time_job_Temporary_staff_employees_female_ratio = (Part_time_job_female +  Temporary_staff_female)/Total_employees_female)  
+
+```
+
+### Combining Statistical table of Population and Households in Japan and employment status survey/「日本の人口・世帯」統計表と就業状態等基本集計の結合
+分析に必要な変数を選択
+```{r}
+Industry_employment <-dplyr::left_join(census_Industrial_Classification_Population, employment_status_survey, by = c("prefec_kanji"))
+
+prefec_id <- readxl::read_excel("input/prefec_id.xlsx")
+
+Industry_employment <-dplyr::left_join(Industry_employment, prefec_id, by = c("prefec_kanji"))
+
+# prefec 除く 2021Aug6Waki
+Industry_employment <- Industry_employment %>% dplyr::select(id,
+  Manufacturing_ratio, Wholesale_Retail_trade_ratio,                         
+  Accomodations_eating_drinking_services_ratio ,                                
+  Living_related_personal_services_amusement_services_ratio,                    
+  Secondary_industry_ratio,Tertiary_industry_ratio,                               Part_time_job_Temporary_staff_Total_employees_ratio,                           
+  Part_time_job_Temporary_staff_employees_male_ratio,                            
+  Part_time_job_Temporary_staff_employees_female_ratio)
+```
+
+
+## Modify variable names/変数名を修正
+```{r}
+colnames(Social_Demographic_Stat) <- 
+  stringr::str_replace_all(colnames(Social_Demographic_Stat), pattern="\\(", replacement="")
+
+colnames(Social_Demographic_Stat) <- 
+  stringr::str_replace_all(colnames(Social_Demographic_Stat), pattern="\\)", replacement="")
+
+colnames(Social_Demographic_Stat) <- 
+  stringr::str_replace_all(colnames(Social_Demographic_Stat), pattern=",", replacement="")
+
+colnames(Social_Demographic_Stat) <- 
+  stringr::str_replace_all(colnames(Social_Demographic_Stat), pattern="-", replacement="_")
+
+colnames(Social_Demographic_Stat) <- 
+  stringr::str_replace_all(colnames(Social_Demographic_Stat), pattern="\r\n", replacement="_")
+
+colnames(Social_Demographic_Stat) <- 
+  stringr::str_replace_all(colnames(Social_Demographic_Stat), pattern=" ", replacement="_")
+
+# アンダースコアが二重の部分を修正　2021Aug6 Waki
+colnames(Social_Demographic_Stat) <- colnames(Social_Demographic_Stat) %>% stringr::str_replace_all(pattern="__", replacement="_")
+
+Social_Demographic_Stat <- Social_Demographic_Stat %>% 
+  dplyr::rename("Population_per_1_km_2_of_total_land_area" = "Population_per_1_k㎡_of_total_land_area") %>%　
+  dplyr::rename("Population_per_1_km_2_of_inhabitable_area" = "Population_per_1_k㎡_of_inhabitable_area")  
+
+Social_Demographic_Stat$id <- as.numeric(Social_Demographic_Stat$id)
+
+Social_Demographic_Stat <- Social_Demographic_Stat %>% tidyr::drop_na(id) #2021Aug6 Waki idを指定
+```
+
+## Merge data/データの結合
+```{r}
+# 社会人口統計と国勢調査をくっつけてdf_covariatesを作成　2021Aug6Waki
+df_covariates <- Social_Demographic_Stat %>% dplyr::left_join(Industry_employment, by = c("id"))
+```
+
+```{r}
+df_covariates <-  df_covariates %>% dplyr::select(id,
+                                                  Population_per_1_km_2_of_inhabitable_area,
+                                                  Secondary_industry_ratio,
+                                                  Tertiary_industry_ratio,
+                                                  Total_population,
+                                                  Ratio_of_aged_population)
+```
+
+
+```{r}
+# csvで出力 2021Aug6Waki
+df_covariates %>% readr::write_excel_csv("output/df_covariates.csv")
+```
+

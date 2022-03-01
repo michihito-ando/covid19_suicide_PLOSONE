@@ -1,0 +1,35 @@
+\begin{table}
+
+\begin{threeparttable}
+\caption{\label{tab:DID_unemploy_on_2nd_safetynet_covar}Estimation results for second-tier safety net, with covariates}
+\centering
+\begin{tabular}[t]{l>{\centering\arraybackslash}p{1.5cm}>{\centering\arraybackslash}p{1.5cm}>{\centering\arraybackslash}p{1.5cm}>{\centering\arraybackslash}p{1.5cm}cc}
+\toprule
+\multicolumn{1}{c}{ } & \multicolumn{2}{c}{Emergency S.A.} & \multicolumn{2}{c}{General Support} & \multicolumn{2}{c}{Housing Security} \\
+\cmidrule(l{3pt}r{3pt}){2-3} \cmidrule(l{3pt}r{3pt}){4-5} \cmidrule(l{3pt}r{3pt}){6-7}
+  & (1) & (2) & (3) & (4) & (5) & (6)\\
+\midrule
+Apr. 2020 & 4.941 & 4.930 & 0.002 & 0.008 & -1.072 & -1.147\\
+ & (27.175) & (26.958) & (3.346) & (3.318) & (0.807) & (0.804)\\
+May. 2020 & 60.029 & 60.018 & 9.231 & 9.237 & -5.270 & -5.345\\
+ & (50.569) & (50.170) & (18.599) & (18.451) & (3.709) & (3.697)\\
+Jun. 2020 & 49.230 & 49.219 & 62.337 & 62.343 & -4.337 & -4.412\\
+ & (52.096) & (51.683) & (34.330) & (34.059) & (2.750) & (2.745)\\
+Jul. 2020 & 13.609 & 13.598 & 87.776 & 87.782 & -1.145 & -1.220\\
+ & (28.076) & (27.849) & (39.148) & (38.840) & (2.236) & (2.225)\\
+Aug. 2020 & 20.326 & 20.315 & 35.863 & 35.869 & -1.958 & -2.033\\
+ & (20.236) & (20.073) & (20.370) & (20.207) & (0.986) & (0.985)\\
+Sep. 2020 & 36.598 & 36.587 & 26.989 & 26.995 & -1.155 & -1.230\\
+ & (24.363) & (24.173) & (20.992) & (20.825) & (0.682) & (0.676)\\
+\midrule
+Sample size & 893 & 893 & 893 & 893 & 423 & 423\\
+R2 Adj. & 0.870 & 0.872 & 0.852 & 0.855 & 0.963 & 0.963\\
+Ref. month & \footnotesize{Jan.2020} & \footnotesize{$\leq$Jan.2020} & \footnotesize{Jan.2020} & \footnotesize{$\leq$Jan.2020} & \footnotesize{Jan.2020} & \footnotesize{$\leq$Jan.2020}\\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}
+\small
+\item [] Notes:  Columns (1), (3), and (5) present WLS estimates shown in the right-hand side of Figure \ref{fig:DID_unemploy_on_2nd_safetynet}. Columns (2), (4), and (6) present WLS estimates based on the model \eqref{eq:did_model_ver2}, weighted by prefecture population size, but individual linear trends are not incorporated and eight covariates are additionally controlled for. The treatment variable is the COVID-19-induced employment shock, which is calculated as equation \eqref{eq:employment_shock}. Robust standard errors are clustered at the prefecture level.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}

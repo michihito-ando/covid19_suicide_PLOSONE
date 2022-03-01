@@ -1,0 +1,327 @@
+---
+title: "COVID-19, Infection, Death, and Mobility"
+author: ""
+date: "`r Sys.Date()`"
+output:
+ html_document:
+    css : R_style.css
+    # theme: cosmo
+    highlight: haddock     # R script highlight type
+    code_folding: 'hide'  # R code folding type
+    toc: TRUE
+    toc_depth: 3           # Heading depth 
+    toc_float: true        # Heading float (横見出し)
+    number_sections: true # Heading number
+    df_print: paged        # head() output like notebook (good for tibble)）
+    latex_engine: xelatex  # for zxjatype pacakge
+    # fig_height: 4.5          # image size height default
+    # fig_width: 8           # image size width default
+    dev: png
+classoption: xelatex,ja=standard
+editor_options: 
+  chunk_output_type: console
+---
+
+
+# Contents/内容
+
+以下のデータを整理
+
+・The google mobility index.
+source:google mobility report(Accessed 25 July 2021)/https://www.google.com/covid19/mobility/
+
+・The number of infected people and Coronavirus (COVID-19) Deaths/ COVID19 感染・死亡データ
+source:https://covid19.mhlw.go.jp/(Accessed 25 July 2021)
+
+# packages
+ 
+```{r}
+rm(list = ls())
+
+path <- getwd()
+
+setwd(path)
+
+# packages
+pacman::p_load(tidyverse, plotly,readxl,DT, lubridate, extrafont)
+
+# Font for windows and mac
+if (stringr::str_detect(path, pattern="Users")){ 
+  
+   theme_set(theme_classic(base_size = 10, base_family = "HiraginoSans-W3"))  # For Mac OS
+   base_family <- "HiraginoSans-W3"
+
+ } else{
+  
+    theme_set(theme_classic(base_size = 10, base_family = "Arial")) # For Windows
+   base_family <- "Arial"
+}    
+ 
+
+```
+
+# Read data 
+```{r}
+newly_confirmed_cases_daily <- readr::read_csv("input/newly_confirmed_cases_daily.csv",col_types = cols(Date= col_date(format="%Y/%m/%d")))
+confirmed_cases_cumulative_daily <-readr::read_csv("input/confirmed_cases_cumulative_daily.csv",col_types = cols(Date= col_date(format="%Y/%m/%d")))
+
+deaths_cumulative_daily <- readr::read_csv("input/deaths_cumulative_daily.csv",col_types = cols(Date= col_date(format="%Y/%m/%d")))
+JP_Mobility_Report <- readr::read_csv("input/2020_JP_Region_Mobility_Report.csv")
+```
+
+# load prefec_id
+
+```{r}
+prefec_id <- read_excel("input/prefec_id.xlsx")
+```
+
+#  The number of cumulative confirmed cases/deaths at the end of June 2020/ COVID19　累積感染者数（6月30日）、累積死者（6月30日）
+
+```{r}
+# Data on the number of cumulative deaths at the end of June 2020
+cum_deaths_20200630 <- deaths_cumulative_daily %>% 
+  mutate(year = year(Date),month=month(Date),day=day(Date)) %>% 
+  filter(Date == "2020-06-30") %>% 
+  mutate(.,month = 6,year=2020)
+
+# Recode "prefecture" to "prerec" and "All" to "zenkoku"/後のleft_joinのためにprefectureをprerecに、Allをzenkokuにrecode
+
+cum_deaths_20200630<- cum_deaths_20200630 %>% 
+  mutate(.,prefec = recode(Prefecture, ALL = "zenkoku"))
+
+# cumulative confirmed cases 
+cum_confirmed_cases_20200630 <- confirmed_cases_cumulative_daily %>% 
+  mutate(year = year(Date),month=month(Date),day=day(Date)) %>% 
+  filter(Date == "2020-06-30") %>% 
+  mutate(.,month = 6,year=2020)
+
+# Recode "prefecture" to "prerec" and "All" to "zenkoku"/後のleft_joinのためにprefectureをprerecに、Allをzenkokuにrecode
+
+cum_confirmed_cases_20200630<- cum_confirmed_cases_20200630 %>% 
+  mutate(.,prefec = recode(Prefecture, ALL = "zenkoku"))
+
+```
+
+
+#  The number of cumulative confirmed cases/deaths at the end of May 2020/COVID19　累積感染者数（5月31日）、累積死者（5月31日）
+
+```{r}
+# Data on the number of cumulative deaths at the end of may 2020
+cum_deaths_20200531 <- deaths_cumulative_daily %>% 
+  mutate(year = year(Date),month=month(Date),day=day(Date)) %>% 
+  filter(Date == "2020-05-31") %>% 
+  mutate(.,month = 5,year=2020)
+
+# Recode "prefecture" to "prerec" and "All" to "zenkoku"/後のleft_joinのためにprefectureをprerecに、Allをzenkokuにrecode
+
+cum_deaths_20200531<- cum_deaths_20200531 %>% 
+  mutate(.,prefec = recode(Prefecture, ALL = "zenkoku"))
+
+
+
+# cumulative confirmed cases 
+cum_confirmed_cases_20200531 <- confirmed_cases_cumulative_daily %>% 
+  mutate(year = year(Date),month=month(Date),day=day(Date)) %>% 
+  filter(Date == "2020-05-31") %>% 
+  mutate(.,month = 5,year=2020)
+
+#  Recode "prefecture" to "prerec" and "All" to "zenkoku後のleft_joinのためにprefectureをprerecに、Allをzenkokuにrecode
+
+cum_confirmed_cases_20200531<- cum_confirmed_cases_20200531 %>% 
+  mutate(.,prefec = recode(Prefecture, ALL = "zenkoku"))
+
+
+```
+
+# moblity index for Japan
+
+
+```{r}
+
+google_mobility_Japan2020  <- JP_Mobility_Report %>% 
+  mutate(year = year(date),month=month(date),day=day(date)) %>% 
+  # 2020年にデータを限定
+  filter(year==2020) %>% 
+  # 日本全国のsub_region1がnaなのでreplace_na
+ replace_na(list(sub_region_1="zenkoku")) %>% 
+  # sub_region1と月次で集計
+  group_by(sub_region_1,month) %>% 
+  summarise(
+    retail_and_recreation = mean(retail_and_recreation_percent_change_from_baseline),
+    grocery_and_pharmacy = mean(grocery_and_pharmacy_percent_change_from_baseline),
+    parks = mean(parks_percent_change_from_baseline),
+    transit_stations = mean(transit_stations_percent_change_from_baseline),
+    workplaces = mean(workplaces_percent_change_from_baseline),
+    residential = mean(residential_percent_change_from_baseline)
+  )
+
+  # make mobility index
+  #  year=2020代入、sub_region1をprefecに変換。
+google_mobility_Japan2020 <-google_mobility_Japan2020 %>% 
+  mutate(.,prefec=sub_region_1,
+         year=2020,
+         google_mobility_index_4vari_average = (retail_and_recreation+grocery_and_pharmacy+transit_stations+workplaces)/4,
+         mobility_index_6vari_average =(retail_and_recreation+grocery_and_pharmacy+transit_stations+workplaces+parks+residential)/6)
+
+
+```
+
+
+# left_join 2020_may
+
+```{r}
+covariates2020may <-left_join(cum_confirmed_cases_20200531, cum_deaths_20200531,by = c("prefec","year","month","day","Date","Prefecture"))
+
+covariates2020may <- left_join(google_mobility_Japan2020, covariates2020may,by = c("prefec","month","year"))
+covariates2020may <- left_join(covariates2020may,prefec_id,by="prefec")
+```
+
+
+# left_join 2020_jun
+
+```{r}
+covariates <-left_join(cum_confirmed_cases_20200630, cum_deaths_20200630,by = c("prefec","year","month","day","Date","Prefecture"))
+
+covariates2020 <- left_join(google_mobility_Japan2020, covariates,by = c("prefec","month","year"))
+covariates2020 <- left_join(covariates2020,prefec_id,by="prefec")
+```
+
+# Save the data for May 2020./2020年5月を残して、csv保存
+
+```{r}
+
+covariates202005 <- covariates2020may %>% 
+# sub_region_1をドロップするために、ungroupを使う。googlemobliity indexの箇所でgroup_byを使っているため。
+  filter(month==5) %>% 
+  ungroup() %>% 
+    select(-c(sub_region_1,Prefecture ))
+
+covariates202005 <- covariates202005 %>% 
+    rename(confirmed_cases_cumulative="Confirmed cases(Cumulative)",deaths_cumulative="Deaths(Cumulative)")
+```
+
+## Write csv/データ保存
+```{r}
+write_csv(covariates202005,"output/infection_death_mobility2020may.csv")
+```
+
+
+# Save the data for June 2020./2020年6月を残して、csv保存
+```{r}
+covariates202006 <- covariates2020 %>% 
+  # sub_region_1をドロップするために、ungroupを使う。googlemobliity indexの箇所でgroup_byを使っているため。
+  filter(month==6) %>% 
+  ungroup() %>% 
+    select(-c(sub_region_1,Prefecture ))
+covariates202006 <- covariates202006 %>% 
+    rename(confirmed_cases_cumulative="Confirmed cases(Cumulative)",deaths_cumulative="Deaths(Cumulative)")
+```
+
+## write_csv/データ保存
+```{r}
+write_csv(covariates202006,"output/infection_death_mobility2020Jun.csv")
+```
+
+
+# Data check/データ確認
+
+```{r}
+datatable(head(covariates2020))
+summary(covariates2020)
+
+datatable(head(covariates202006))
+
+summary(covariates202006)
+```
+
+
+
+# graph mobility index old 
+
+```{r}
+moblity_jp_zenkoku<-google_mobility_Japan2020 %>% 
+  filter(., sub_region_1=="zenkoku") 
+
+
+graph_mobility <- ggplot(data = moblity_jp_zenkoku, mapping = aes(x = month)) +
+    theme_classic() +
+      geom_line(aes(y= google_mobility_index_4vari_average, color = "Google mobility index（average of four mobility index）"))+
+      geom_line(aes(y= mobility_index_6vari_average, color = "Google mobility index（average of six mobility index）"))+
+        scale_x_continuous(breaks = seq(2,12,by=1)) +
+   #凡例調整
+      theme(legend.position="bottom")+
+      theme(legend.background = element_rect(fill = NA))+
+      theme(legend.direction  ="vertical")+
+      labs(title="Google mobility index ",x = "month （in 2020）", y = "",color="") 
+
+  ggplotly(graph_mobility)
+```
+
+# save 
+```{r}
+
+
+if (stringr::str_detect(path, pattern="Users")){ 
+
+  quartz(file = "output/graph_trends_graph_mobility_oldver.pdf", type = "pdf", 
+         family = base_family, width = 7, height = 5,dpi=300, # for mac
+        pointsize = 10)
+print(graph_mobility)
+dev.off()} else{
+
+ggsave(graph_mobility,filename = "output/graph_trends_graph_mobility_oldver.pdf", 
+       width = 7, height = 5,dpi=300) # for windows
+
+}
+```
+
+# graph mobility index
+```{r}
+#2021Sep30 Waki
+
+moblity_jp_zenkoku <- google_mobility_Japan2020 %>% 
+  filter(., sub_region_1=="zenkoku") 
+
+graph_mobility <- ggplot(data = moblity_jp_zenkoku, mapping = aes(x = month)) +
+    theme_classic() +
+      geom_line(aes(y= mobility_index_6vari_average, color = "Google mobility index（average of six mobility index)"))+
+        scale_x_continuous(breaks = seq(2,12,by=1)) +
+   #凡例調整
+      theme(legend.position="none")+
+      labs(title="",x = "Month in 2020", y = "",color="") +
+      scale_color_manual(values = "black") +
+      annotate("rect",xmin = 4,xmax = 5,ymin = -Inf,ymax = Inf, alpha = .3, fill = "gray") +
+    　annotate(geom = "text", x = 5, y = 0,
+             label = "←The first state of emergency", size = 5, hjust = 0) + 
+    theme(text = element_text(family = base_family))
+
+
+
+ggplotly(graph_mobility)
+```
+
+# save 
+```{r}
+#2021Sep30 Waki
+
+if (stringr::str_detect(path, pattern="Users")){ 
+
+  quartz(file = "output/graph_trends_graph_mobility.pdf", type = "pdf", 
+         family = base_family, width = 7, height = 5,dpi=300, # for mac
+        pointsize = 10)
+print(graph_mobility)
+dev.off()} else{
+
+ggsave(graph_mobility,filename = "output/graph_trends_graph_mobility.pdf", 
+       width = 7, height = 5,dpi=300) # for windows
+
+}
+```
+
+
+# Data checkデータ確認
+
+```{r}
+datatable(moblity_jp_zenkoku)
+```
+

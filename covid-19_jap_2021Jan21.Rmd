@@ -1,0 +1,237 @@
+---
+title: "covid-19 plot"
+author: ""
+date: "`r Sys.Date()`"
+output:
+ html_document:
+    css : R_style.css
+    # theme: cosmo
+    highlight: haddock     # Rスクリプトのハイライト形式
+    code_folding: 'hide'  # Rコードの折りたたみ表示を設定
+    toc: TRUE
+    toc_depth: 3           # 見出しの表示とその深さを指定
+    toc_float: true        # 見出しを横に表示し続ける
+    number_sections: true # 見出しごとに番号を振る
+    df_print: paged        # head()の出力をnotebook的なものに（tibbleと相性良）
+    latex_engine: xelatex  # zxjatypeパッケージを使用するために変更
+    # fig_height: 4.5          # 画像サイズのデフォルトを設定
+    # fig_width: 8           # 画像サイズのデフォルトを設定
+    dev: png
+classoption: xelatex,ja=standard
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+knitr::opts_chunk$set(fig.align = 'center')
+knitr::opts_chunk$set(message = F)
+knitr::opts_chunk$set(warning = F)
+```
+
+```{r}
+rm(list = ls())
+
+path <- getwd()
+
+setwd(path)
+
+# packages
+pacman::p_load(tidyverse, plotly,readxl,scales, extrafont,PerformanceAnalytics, GGally, patchwork, ggpubr, ggrepel, stargazer)
+
+# Font for windows and mac
+if (stringr::str_detect(path, pattern="Users")){ 
+  
+   theme_set(theme_classic(base_size = 10, base_family = "HiraginoSans-W3"))  # For Mac OS
+
+ } else{
+  
+theme_set(theme_classic(base_size = 10, base_family = "Arial")) # For Windows
+   }      
+```
+
+# 国内の新規死亡者数と新規感染者数(英語)
+```{r}
+# 厚生労働省 https://www.mhlw.go.jp/stf/covid-19/open-data.html (2020/08/28アクセス)
+
+pcr_positive_daily <- readr ::read_csv("input/mhlw-open-data_positive.csv")
+
+pcr_positive_daily <- pcr_positive_daily %>% 
+  dplyr::rename("month_date"="日付", 
+                "newpcr_tested_positive" = "PCR 検査陽性者数(単日)")
+  
+death_total <- readr ::read_csv("input/mhlw-open-data_death.csv")
+death_total <- death_total  %>% 
+  dplyr::rename("month_date"="日付", 
+                "death" = "死亡者数")
+df <- dplyr::left_join(pcr_positive_daily, death_total, by = "month_date")
+
+df$month_date <-as.Date(df$month_date)
+
+df  <-  df %>% dplyr::mutate(death = replace_na(death, 0))
+
+df$newdeath[1] <- df$death[1]
+
+for (i in 2: nrow(df)) {              
+   df$newdeath[i] <- df$death[i] - df$death[i-1] 
+}   
+
+df <- df %>% dplyr::select(month_date, newdeath, newpcr_tested_positive)
+```
+
+```{r}
+# 東洋経済ONLINE
+# https://toyokeizai.net/sp/visual/tko/covid19/　(2020/09/01アクセス)
+# NHK 特設サイト新型コロナウィルス　
+# https://www3.nhk.or.jp/news/special/coronavirus/data-all/(2020/09/01アクセス)
+
+df <- df %>% dplyr::mutate(newdeath = dplyr::case_when(
+  month_date == "2020-04-22" ~ 0, # 修正
+  month_date == "2020-05-08" ~ 0, # 修正
+  month_date == "2020-06-19" ~ newdeath -13, # 埼玉県のデータを除く
+  TRUE ~ newdeath
+))
+```
+
+
+```{r}
+# 新規感染者後方7日移動平均
+df <- df %>% dplyr::mutate(seven_avg = TTR::SMA(newpcr_tested_positive, 7))
+
+df  <-  df %>% dplyr::mutate(seven_avg = replace_na(seven_avg, 0))
+```
+
+※4月22日より厚生労働省が確認中の作業を含む、また5月8日よりデータソースが変更された。したがって、それぞれ前日との継続性がないため、新規増減を0とする。
+<br>
+※埼玉県は6月19日、「死亡した人の計上方法を、国の示した基準をもとに見直した結果、死亡した感染者が13人増えた」と発表した。前日との継続性がないため、6月19日の埼玉県の新規増減は0とする。
+```{r}
+#2021Sep27 waki
+
+df <- df %>% dplyr::mutate(v2.scaled = df$newdeath*16.5) 
+  
+df <- df %>% dplyr::filter(month_date <= "2020-06-30")
+
+g <-  df %>%  ggplot(aes(x = month_date, 
+             y = seven_avg)) + 
+  
+  geom_line(stat = "identity", alpha = 1) +
+  
+  theme(title = element_text(size = 20),
+        axis.text=element_text(size=20),
+        axis.title=element_text(size=20,face="bold")) +
+  theme_classic(base_family = base_family) + 
+
+  ## 表示するのはスケールしたv2
+  geom_bar(aes(y = v2.scaled), stat = "identity", fill = "black", alpha = 0.3) + 
+  ## スケールしたv2を、再度元のスケールに戻す
+  scale_y_continuous(sec.axis = sec_axis(~./16.5, name = "Daily confirmed deaths"), expand = c(0,0),limits = c(0, 1100))+
+  
+  xlab("Date") +
+  ylab("Confirmed cases (seven-day rolling average)")
+
+# Dateクラスのベクトルを使って目盛位置を指定する。byで間隔の指定もできる。
+datebreaks <- c(as.Date("2020-01-01"),
+                as.Date("2020-02-01"),
+                as.Date("2020-03-01"), 
+                as.Date("2020-04-01"),
+                as.Date("2020-05-01"),
+                as.Date("2020-06-01"),
+                as.Date("2020-07-01"))
+
+
+g <- g + scale_x_date(labels = scales::date_format("%m/%d"), breaks=datebreaks, limits = as.Date(c("2020-01-10", "2020-06-30"))) #間隔をdatebreaks変数で指定
+```
+
+```{r}
+# 説明
+# 新規感染者 折れ線
+g <- g +  annotate(geom="text", x=as.Date("2020-03-10"), y =310,
+             label="Confirmed cases (seven-day rolling average)", size=3) +
+    
+  annotate("segment", x = as.Date("2020-03-25"), y = 280, 
+             xend = as.Date("2020-04-01"), yend  = 220,
+             arrow = arrow(length = unit(0, "cm"), type = "closed")
+             ) 
+
+# 新規死者数 棒グラフ
+g <- g +  annotate(geom="text", x=as.Date("2020-05-25"), y = 440,
+             label="Confirmed deaths", size=3) +
+    
+  annotate("segment", x = as.Date("2020-05-21"), y = 410, 
+             xend = as.Date("2020-05-13"), yend  = 400,
+             arrow = arrow(length = unit(0, "cm"), type = "closed")
+             ) 
+
+```
+
+```{r}
+# A社会的事象
+g <- g + 
+  annotate(geom="text", x=as.Date("2020-01-16"), y =600,
+             label="●First confirmed case (Jan. 16)", size=3,hjust = 0) +
+  
+  annotate(geom="text", x=as.Date("2020-01-31"), y =550,
+             label="●Mask shortage started (End of Jan.)", size=3,hjust = 0) +
+
+  annotate(geom="text", x=as.Date("2020-02-13"), y =450,
+             label="●First confirmed death (Feb. 13)", size=3,hjust = 0) 
+```
+
+```{r}
+# B政治的対応（予算以外）
+g <- g + 
+  annotate(geom="text", x=as.Date("2020-01-30"), y = 850,
+             label="●Headquarters formed (Jan. 30)", size=3,hjust = 0) +
+  
+  annotate(geom="text", x=as.Date("2020-02-05"), y =500,  
+             label="●Outbreak on Diamond Princess cruise ship (Mid of Feb.)", size=3,hjust = 0) +
+
+  annotate(geom="text", x=as.Date("2020-02-14"), y =  800,
+             label="●Expert Meeting formed (Feb. 14)", size=3,hjust = 0)  +
+  
+  annotate(geom="text", x=as.Date("2020-02-26"), y = 750,
+             label="●Large-scale event cancellation request by the Prime Minister (Feb. 26)", size=3,hjust = 0) +
+  
+  annotate(geom="text", x=as.Date("2020-02-27"), y = 700,
+             label="●School closure request by the Prime Minister (Feb. 27)", size=3,hjust = 0)  +
+
+  annotate(geom="text", x=as.Date("2020-04-07"), y = 650,
+             label="●Declaration of a State of Emergency (Apr. 7)", size=3,hjust = 0) +
+  
+  annotate(geom="text", x=as.Date("2020-05-26"), y = 600,
+             label="Declaration of a State of Emergency lifted (May. 25)●", size=3, hjust = 1) 
+```
+
+
+```{r, fig.width=10, fig.height=5}
+# C 財政対応
+g <- g +  
+  annotate(geom="text", x=as.Date("2020-02-13"), y =  1000,
+             label="●First Emergency Response Package (Feb. 13)", size=3,hjust = 0)  +
+  
+    annotate(geom="text", x=as.Date("2020-03-10"), y = 950,
+             label="●Second Emergency Response Package (Mar. 10)", size=3,hjust = 0)  +
+  
+  annotate(geom="text", x=as.Date("2020-04-30"), y = 900,
+             label="●First Supplementary Budget (Apr. 30)", size=3,hjust = 0) +
+  
+  annotate(geom="text", x=as.Date("2020-06-13"), y = 850,
+             label="Second Supplementary Budget (Jun. 12)●", size=3,hjust = 1) 
+
+g
+```
+
+```{r, include=FALSE}
+# pngで出力
+ggsave(file = "output/covid19_japan_eng.png", plot = g, width = 10, height = 5)
+
+# ggsave(file = "covid19_japan_eng.pdf", plot = g, width = 10, height = 5) 2021Dec27 
+
+quartz(file = "output/covid19_japan_eng.pdf", type = "pdf", family = base_family, width = 10, height = 5,
+       pointsize = 10)
+print(g)
+dev.off()
+```
+
+
+
+

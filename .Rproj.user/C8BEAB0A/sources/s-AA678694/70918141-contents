@@ -1,0 +1,1366 @@
+---
+title: "Data construction"
+author: ""
+date: "`r Sys.Date()`"
+output:
+ html_document:
+    css : R_style.css
+    # theme: cosmo
+    highlight: haddock     # R script highlight type
+    code_folding: 'hide'  # R code folding type
+    toc: TRUE
+    toc_depth: 3           # Heading depth 
+    toc_float: true        # Heading float (横見出し)
+    number_sections: true # Heading number
+    df_print: paged        # head() output like notebook (good for tibble)）
+    latex_engine: xelatex  # for zxjatype pacakge
+    # fig_height: 4.5          # image size height default
+    # fig_width: 8           # image size width default
+    dev: png
+classoption: xelatex,ja=standard
+editor_options: 
+  chunk_output_type: console
+  
+---
+
+```{r setup}
+Sys.setenv(LANG = "en") #English
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list = ls())
+
+path <- getwd()
+
+setwd(path)
+
+# packages
+pacman::p_load(tidyverse, plotly,readxl,scales, extrafont,PerformanceAnalytics, GGally, patchwork, ggpubr, ggrepel, stargazer)
+
+# Font for windows and mac
+if (stringr::str_detect(path, pattern="Users")){ 
+  
+   theme_set(theme_classic(base_size = 10, base_family = "HiraginoSans-W3"))  # For Mac OS
+
+ } else{
+  
+theme_set(theme_classic(base_size = 10, base_family = "Arial")) # For Windows
+   }     
+```
+
+# Structure/構成
+
+- Read prefecture ID and population data (都道府県IDや人口データの読み込み)
+- Read and preprocess data of second-tier programs (住居確保・緊急小口・総合支援のコロナ前後のデータを読み込み、統合)
+- Read and preprocess data of public assistance (生活保護データの読み込みや整理)
+- Read and preprocess data of unemployment benefits (失業給付データの読み込みと整理)
+- Read and preprocess suicide data (stata data) (自殺率データ（Stataデータ）の読み込みと整理)
+- Join outcome data (アウトカムデータの結合)
+- Extract and save national data for time-series graphs (時系列グラフ用にアウトカムの全国データを抽出して保存)
+- Join outcome data and treatment data (アウトカムデータと処置データの統合)
+- 処置変数の作成と符号変更
+- 分析用データの保存
+
+Data checks using tables and figures are provided in desc_stats_and_graphs.Rmd.
+(なお表やグラフを用いたデータチェックはdesc_stats_and_graphs.Rmdで行っている。)
+
+# Prefecture population/都道府県人口
+
+- Prefecture populaton estimates are annual data.
+- For example, prefecture population estimates in Octorber 2019 can be obtained from [e-stat](https://www.e-stat.go.jp/stat-search/files?page=1&layout=datalist&toukei=00200524&tstat=000000090001&cycle=7&year=20190&month=0&tclass1=000001011679).
+- Table number 4 (prefecutre population>total population,>total) is used.
+- For monthly per-capita data, we use one-year-lag population. That is, the denominator of monthly data in 2020 is prefecture population in October 2019.
+
+- 都道府県の人口推計データは年レベル。
+- 例えば2019年10月の都道府県推計データは、[e-Statの都道府県別人口推計](https://www.e-stat.go.jp/stat-search/files?page=1&layout=datalist&toukei=00200524&tstat=000000090001&cycle=7&year=20190&month=0&tclass1=000001011679) より取得。
+- 表番号4の「都道府県，男女別人口及び人口性比－総人口，日本人人口(2019年10月1日現在)」の「総人口」の「男女計」のデータ。単位は千人
+- なお、人口当たりの月次データとしては、1年ラグとった人口を用いる。すなわち、2020年の月次データの分母として2019年10月の都道府県人口を用いる。
+
+```{r}
+# Read from excel
+
+df_population_wide <- readxl::read_excel("input/prefec_pop_estimates2016_2019.xlsx")
+
+# Rename prefec to prefec_kanji 
+# Remove "都道府県" characters from prefec_kanji / prefec_kanjiが"都道府県"を含むため除去 20201023
+df_population_wide <- df_population_wide %>% 
+  rename("prefec_kanji" = "prefec") %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "県", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "府", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "東京都", "東京"))    
+
+# Convert to the long format / long形式に変換
+
+## total population
+df_population_total <- df_population_wide %>% 
+  select(id, prefec_kanji, population_total2016, population_total2017, population_total2018, population_total2019) %>%    
+  tidyr::pivot_longer(population_total2016:population_total2019,
+                      names_to = "year", 
+                      names_prefix = "population_total", 
+                      values_to = "population_total")
+
+## male population
+df_population_male <- df_population_wide %>% 
+  select(id, prefec_kanji, population_male2016, population_male2017, population_male2018, population_male2019) %>%    
+  tidyr::pivot_longer(population_male2016:population_male2019,
+                      names_to = "year", 
+                      names_prefix = "population_male", 
+                      values_to = "population_male")
+
+## female population
+df_population_female <- df_population_wide %>% 
+  select(id, prefec_kanji, population_female2016, population_female2017, population_female2018, population_female2019) %>%    
+  tidyr::pivot_longer(population_female2016:population_female2019,
+                      names_to = "year", 
+                      names_prefix = "population_female", 
+                      values_to = "population_female")
+
+# join total, male, and female populations
+df_population <- df_population_total %>% 
+  left_join(df_population_male, by = c("id", "prefec_kanji", "year")) %>%
+  left_join(df_population_female, by = c("id", "prefec_kanji", "year")) 
+  
+# Make "year" "year+1" / 年を1年先にずらす（人口データを１年ラグに）
+df_population <- df_population %>% mutate(year = as.numeric(year) + 1)
+
+# Attach "prefec variable / "prefec"変数（ローマ字の都道府県名)の付与　
+## ※元々はID付与のためだったが、df_populationの元excelにID残したので、idではなくprefecのために残す 210730
+
+prefec_id <- readxl::read_excel("input/prefec_id.xlsx")
+df_population <-  df_population %>% dplyr::left_join(prefec_id, by = c("id", "prefec_kanji"))
+
+```
+
+# 2nd-tier safety net outcomes/住居確保・緊急小口・総合支援アウトカム
+
+## Housing Security Benefits (before COVID)/住居確保給付金(コロナ前)
+
+```{r}
+# Read from excel
+jukyo_2019jan_2019mar <- readxl::read_excel("input/jukyo_1901_1903.xlsx")
+
+# "※支給済額は、過去月に決定し支給した額を含む。
+# ※2019年度 (2019年4月から2020年3月)については未集計のため、 2019年1月から3月までの件数等となります。"
+
+# Convert to English names / 変数名を英語に変換
+jukyo_2019jan_2019mar <- jukyo_2019jan_2019mar %>% 
+  dplyr::rename(prefec_kanji = "都道府県", 
+                jukyo_apply = "申請件数", # number of applications
+                jukyo_number = "決定件数", # number of accepted applications
+                jukyo_payment_amount = "支給済額(単位：千円）", # payment amount (1000Yen)
+                month = "月", 
+                year = "年")
+
+# Remove "都道府県" characters from prefec_kanji / prefec_kanjiが"都道府県"を含むため除去 20201023
+jukyo_2019jan_2019mar <- jukyo_2019jan_2019mar  %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "県", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "府", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "東京都", "東京")) 
+
+# Convert 「合計」「合 計」 to 「全国」
+jukyo_2019jan_2019mar <- jukyo_2019jan_2019mar %>% 
+  dplyr::mutate(prefec_kanji = case_when(
+    str_detect(prefec_kanji, "合     計") ~ "全国",
+    str_detect(prefec_kanji, "合計") ~ "全国",
+    TRUE ~ prefec_kanji))
+  
+# Attach prefecture ID / 都道府県IDの付与　#201023
+jukyo_2019jan_2019mar <-  dplyr::left_join(jukyo_2019jan_2019mar, prefec_id, by = "prefec_kanji") 
+
+# Make "date" from "year" and "month"
+jukyo_2019jan_2019mar <- jukyo_2019jan_2019mar %>% dplyr::mutate(date = paste(year, month, "1", sep = "-"))
+jukyo_2019jan_2019mar$date <- as.Date(jukyo_2019jan_2019mar$date)
+jukyo_2019jan_2019mar <- jukyo_2019jan_2019mar %>% dplyr::select(-month, -year)
+```
+
+## Housing Security Benefits (during COVID)/住居確保給付金(コロナ期)
+
+```{r}
+# Read from excel 
+jukyo_2020apr_2020nov <- readxl::read_excel("input/jukyo_2004_2011.xlsx")
+
+# "※支給済額は、過去月に決定し支給した額を含む。
+# ※本集計は速報値としてとりまとめたものであり、件数、金額に変動が生じることがある。"
+
+# Convert to English names / 変数名を英語に変換
+jukyo_2020apr_2020nov <- jukyo_2020apr_2020nov %>% 
+  dplyr::rename(prefec_kanji = "都道府県", 
+                jukyo_apply = "申請件数", 
+                jukyo_number = "決定件数", 
+                jukyo_payment_amount = "支給済額(千円)", 
+                month = "月", 
+                year = "年")
+
+# Remove "都道府県" characters from prefec_kanji / prefec_kanjiが"都道府県"を含むため除去 20201023
+jukyo_2020apr_2020nov <- jukyo_2020apr_2020nov %>% 
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "県", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "府", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "東京都", "東京")) 
+
+# Convert 「合計」「合 計」 to 「全国」
+jukyo_2020apr_2020nov <- jukyo_2020apr_2020nov %>% 
+  dplyr::mutate(prefec_kanji = case_when(
+    str_detect(prefec_kanji, "合     計") ~ "全国",
+    str_detect(prefec_kanji, "合計") ~ "全国",
+    TRUE ~ prefec_kanji))
+
+# Attach prefecture ID / 都道府県IDの付与　#201023
+jukyo_2020apr_2020nov <- dplyr::left_join(jukyo_2020apr_2020nov,prefec_id, by = "prefec_kanji") #201023
+
+# Make "date" from "year" and "month"
+jukyo_2020apr_2020nov <-jukyo_2020apr_2020nov %>% dplyr::mutate(date = paste(year, month, "1", sep = "-"))
+jukyo_2020apr_2020nov$date <- as.Date(jukyo_2020apr_2020nov$date)
+jukyo_2020apr_2020nov <- jukyo_2020apr_2020nov %>% dplyr::select(-month, -year)
+```
+
+## Join "Housing Security Benefits" before and after COVID/住居確保給付金：コロナ前後の結合
+
+```{r}
+# Before COVIDとAfter COVIDの結合 (with bind_rows)
+jukyo_2019jan_2020nov <- dplyr::bind_rows(jukyo_2019jan_2019mar, jukyo_2020apr_2020nov)
+```
+
+## Emergency Small Amount Fund (before COVID)/緊急小口資金（コロナ前）
+
+```{r}
+# Read from Excel
+koguchi_2019jan_2020jan <- readxl::read_excel("input/koguchi_1901_2001.xlsx")
+
+# Convert to English names / 変数名を英語に変換
+koguchi_2019jan_2020jan <- koguchi_2019jan_2020jan %>% 
+  dplyr::rename(prefec_kanji = "都道府県",
+                koguchi_number = "決定件数",
+                koguchi_payment_amount = "決定金額", 
+                month = "月", 
+                year = "年")
+
+# Remove "都道府県" characters from prefec_kanji / prefec_kanjiが"都道府県"を含むため除去 20201023
+koguchi_2019jan_2020jan <- koguchi_2019jan_2020jan %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "県", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "府", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "東京都", "東京")) 
+
+# Convert 「合計」「合 計」 to 「全国」
+koguchi_2019jan_2020jan <- koguchi_2019jan_2020jan %>% 
+  dplyr::mutate(prefec_kanji = case_when(
+    str_detect(prefec_kanji, "合     計") ~ "全国",
+    str_detect(prefec_kanji, "合計") ~ "全国",
+    TRUE ~ prefec_kanji))
+
+# Attach prefecture ID / 都道府県IDの付与　#201023
+koguchi_2019jan_2020jan <-  dplyr::left_join(koguchi_2019jan_2020jan,prefec_id, by = "prefec_kanji") #201023
+
+# Make "date" from "year" and "month"
+koguchi_2019jan_2020jan <- koguchi_2019jan_2020jan %>% dplyr::mutate(date = paste(year, month, "1", sep = "-"))
+koguchi_2019jan_2020jan$date <- as.Date(koguchi_2019jan_2020jan$date)
+koguchi_2019jan_2020jan <- koguchi_2019jan_2020jan %>% dplyr::select(-month, -year)
+```
+
+## General Support FUnd (before COVID)/ 総合支援資金(コロナ前)
+
+```{r}
+# Read from Excel
+sogo_2019jan_2020jan <- readxl::read_excel("input/sogo_1901_2001.xlsx")
+
+# Convert to English names / 変数名を英語に変換
+sogo_2019jan_2020jan  <- sogo_2019jan_2020jan  %>% 
+  dplyr::rename(prefec_kanji = "都道府県", 
+                prefec_kanji = "都道府県",
+                sogo_number = "決定件数", 
+                sogo_payment_amount = "決定金額", 
+                month = "月", 
+                year = "年")
+
+# Remove "都道府県" characters from prefec_kanji / prefec_kanjiが"都道府県"を含むため除去 20201023
+sogo_2019jan_2020jan <- sogo_2019jan_2020jan %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "県", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "府", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "東京都", "東京")) 
+
+# Convert 「合計」「合 計」 to 「全国」
+sogo_2019jan_2020jan <- sogo_2019jan_2020jan %>% 
+  dplyr::mutate(prefec_kanji = case_when(
+    str_detect(prefec_kanji, "合     計") ~ "全国",
+    str_detect(prefec_kanji, "合計") ~ "全国",
+    TRUE ~ prefec_kanji))
+
+# 都道府県IDの付与　#201023
+sogo_2019jan_2020jan <-  dplyr::left_join(sogo_2019jan_2020jan, prefec_id, by = "prefec_kanji") #201023
+
+# year and monthからのdate変数の生成
+sogo_2019jan_2020jan <- sogo_2019jan_2020jan %>% dplyr::mutate(date = paste(year, month, "1", sep = "-"))
+sogo_2019jan_2020jan$date <- as.Date(sogo_2019jan_2020jan$date)
+sogo_2019jan_2020jan <- sogo_2019jan_2020jan %>% dplyr::select(-month, -year)
+```
+
+##  Join Emergency Small Amount Fund and General Support Fund (before COVID)/緊急小口資金と総合支援資金の統合(コロナ前)
+
+```{r}
+# Join Emergency Small Amount Fund and General Support Fund / 緊急小口資金に総合支援資金
+koguchi_sogo_2019jan_2020jan <- dplyr::left_join(koguchi_2019jan_2020jan,sogo_2019jan_2020jan, 
+                                                 by = c("id", "date", "prefec_kanji","prefec")) #201023
+``` 
+
+## Emergency Small Amount Fund and General Support Fund(during COVID)/緊急小口資金と総合支援資金(コロナ期）
+
+During COVID, Small Amount Fund and General Support Fund are provided in one Excel file.
+(コロナ以後は緊急小口資金と総合支援基金は同一のエクセルファイルにて提供されている。)
+
+```{r}
+# Read from Excel
+koguchi_sogo_2020apr_2020dec <- readxl::read_excel("input/koguchi_sogo_2004_2012.xlsx") #2021Jan26
+
+# ※ 本集計は速報値としてとりまとめたものであり、件数、金額に変動が生じることがある。
+# ※ 貸付の決定については、8月1日までに申請があったものについて8月5日時点で確認したもの。
+# 月の区切りがややイレギュラーな点や8月データは半月分である点に注意
+
+# Rename prefec to prefec_kanji
+koguchi_sogo_2020apr_2020dec <- koguchi_sogo_2020apr_2020dec %>% rename("prefec_kanji" = "prefec")
+
+# Remove "都道府県" characters from prefec_kanji / prefec_kanjiが"都道府県"を含むため除去 20201023
+koguchi_sogo_2020apr_2020dec <- koguchi_sogo_2020apr_2020dec %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "県", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "府", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "東京都", "東京")) 
+
+# Convert 「合計」「合 計」 to 「全国」
+koguchi_sogo_2020apr_2020dec <- koguchi_sogo_2020apr_2020dec %>% 
+  dplyr::mutate(prefec_kanji = case_when(
+    str_detect(prefec_kanji, "合     計") ~ "全国",
+    str_detect(prefec_kanji, "合計") ~ "全国",
+    TRUE ~ prefec_kanji))
+
+
+# "wide" to "long" format
+koguchi_sogo_2020apr_2020dec <- tidyr::pivot_longer(data = koguchi_sogo_2020apr_2020dec, 
+                                                    names_to = "name", 
+                                                    values_to = "number", 
+                                                    -c("prefec_kanji"))
+
+# Attach prefecture ID / 都道府県IDの付与　#201023
+koguchi_sogo_2020apr_2020dec <-  dplyr::left_join(koguchi_sogo_2020apr_2020dec, prefec_id, by = "prefec_kanji") #201023
+
+# Variable category / 変数カテゴリー名作成
+koguchi_sogo_2020apr_2020dec <-koguchi_sogo_2020apr_2020dec %>% dplyr::mutate(category = case_when(
+  str_detect(name, "koguchi_apply") ~ "koguchi_apply",
+  str_detect(name, "koguchi_number") ~ "koguchi_number",
+  str_detect(name, "koguchi_payment_amount") ~ "koguchi_payment_amount",
+  str_detect(name, "sogo_apply") ~ "sogo_apply",
+  str_detect(name, "sogo_number") ~ "sogo_number",
+  str_detect(name, "sogo_payment_amount") ~ "sogo_payment_amount"
+))
+
+# "data" variable / date変数作成
+# Note that the date category is irregular for these two variables. (日にちのカテゴリがイレギュラーな点に注意)
+# unique(koguchi_sogo_2020apr_2020dec$name) (to check data)
+
+koguchi_sogo_2020apr_2020dec <-koguchi_sogo_2020apr_2020dec %>% dplyr::mutate(date = case_when(
+  str_detect(name, "3/29～5/2") ~ "2020-04-01",
+  str_detect(name, "5/3～5/30") ~ "2020-05-01",
+  str_detect(name, "5/31～6/27") ~ "2020-06-01",
+  str_detect(name, "6/28～8/1") ~ "2020-07-01",
+  str_detect(name, "8/2～8/29") ~ "2020-08-01",
+  str_detect(name, "8/30～10/3") ~ "2020-09-01",
+  str_detect(name, "10/4～10/31") ~ "2020-10-01",
+  str_detect(name, "11/1～11/28") ~ "2020-11-01",
+  str_detect(name, "11/29~1/2") ~ "2020-12-01",
+  )) 
+
+## Make "data" variable
+koguchi_sogo_2020apr_2020dec$date <- as.Date(koguchi_sogo_2020apr_2020dec$date)
+
+
+# drop "name" variable
+koguchi_sogo_2020apr_2020dec <- koguchi_sogo_2020apr_2020dec %>% dplyr::select(-name)
+
+# wideデータに変換
+koguchi_sogo_2020apr_2020dec <- koguchi_sogo_2020apr_2020dec %>% 
+  tidyr::pivot_wider(names_from = "category", values_from  = "number")
+
+```
+
+## Bind Emergency Small Amount Fund and General Support Fund (before and after COVID)/緊急小口資金と総合支援資金の統合(コロナ前後)
+
+```{r}
+# Bind
+koguchi_sogo_2019jan_2020dec <- dplyr::bind_rows(koguchi_sogo_2019jan_2020jan, koguchi_sogo_2020apr_2020dec)
+
+# Reorder variables
+koguchi_sogo_2019jan_2020dec <- koguchi_sogo_2019jan_2020dec[c("prefec", 
+                                                               "prefec_kanji",
+                                                               "id",
+                                                               "date",
+                                                               "koguchi_apply",
+                                                               "koguchi_number",
+                                                               "koguchi_payment_amount",
+                                                               "sogo_apply",
+                                                               "sogo_number",
+                                                               "sogo_payment_amount")]
+
+# Visual check of panel data by ordeing id and data / idとdate順に並び替えてパネルデータの目視チェック
+koguchi_sogo_2019jan_2020dec <- dplyr::arrange(koguchi_sogo_2019jan_2020dec, id)
+```
+
+## Join 2nd-tier safety net / 緊急小口・総合支援と住居確保データの統合と年データ作成
+
+```{r}
+# Join Housing Security Benefits to temporary loans /緊急小口・総合支援データをベースに住居確保データをleft join
+koguchi_sogo_jukyo_2019jan_2020dec <- dplyr::left_join(koguchi_sogo_2019jan_2020dec, jukyo_2019jan_2020nov, 
+                                by = c("prefec", "prefec_kanji","id", "date")) 
+
+# "year and month" data / year & monthの作成(ただしmonthはこのデータでは使わない)
+koguchi_sogo_jukyo_2019jan_2020dec <- koguchi_sogo_jukyo_2019jan_2020dec %>%
+ mutate(year = as.numeric(stringr::str_sub(date, start=1, end=4))) %>%
+  mutate(month = as.numeric(stringr::str_sub(date, start=6, end=7))) 
+```
+
+## Per capita 2nd-tier safety net/人口10万人あたりの緊急小口・総合支援と住居確保データ
+
+```{r}
+# Join population/人口データの結合
+koguchi_sogo_jukyo_2019jan_2020dec <- dplyr::left_join(koguchi_sogo_jukyo_2019jan_2020dec, df_population, 
+                                                 by = c("prefec_kanji", "prefec", "id", "year"))
+
+# Per 100 thousand population/人口あたりデータの作成(100,000人あたり)
+koguchi_sogo_jukyo_percapita <- koguchi_sogo_jukyo_2019jan_2020dec %>%
+  mutate(across(koguchi_apply:jukyo_payment_amount,
+                ~(.x / population_total)* 100)) # per 100000 population
+```
+
+# Public Assistance outcomes/生活保護アウトカム
+
+- National Survey on Public Assistance Recipients
+- Monthly data 
+https://www.mhlw.go.jp/toukei/list/74-16b.html
+- Prefecture statistics table, table 1, Public Assistance Recipient houshouds and recipients, 2017.1-2020.9
+- Construct year-on-year data from 2018.1-2020.9 using data in 2017.1-2020.9
+
+- 被保護者調査：調査の結果
+- 結果の概要（月次調査）2017年度-2021年度
+https://www.mhlw.go.jp/toukei/list/74-16b.html
+- 「都道府県統計表 統計表1　生活保護の被保護世帯数及び実人員」より、被保護世帯および被保護実人員のデータを2017.1-2020.9まで整理。
+- 2017.1-2020.9までの生データおよび2018.1-2020.9までの前年同期差（YOY)のデータを作成。
+- 2017年分は2021.07.30に追加
+
+## Read Public Assistance data/生活保護データの読み込み 2017-2020 
+
+- Data frame named as "hogo_raw_2017jan_2020sep"
+
+```{r}
+# Read the whole csv files in one folder / フォルダ内のcsvファイルの一括読み込み
+
+## Read / 一括読み込み
+## "hihogo_data_csv" is the subfolder that contains csv data of public assistance recipients(被保護調査)
+files = fs::dir_ls(path = file.path("output/hihogo_data_csv"),
+                   glob = "*.csv")
+
+
+## Combine csv files / よみこんだfilesを結合
+## purrr::map_dfr(.x, .f, ..., .id = NULL)：結果をdplyr::bind_rows()で結合したdata.frameとして返すmap亜種。
+combined_df = purrr::map_dfr(files, read_csv)
+
+# Convert to English names
+hogo_raw_2017jan_2020sep <- combined_df %>% dplyr::rename("title" = "統計表１　生活保護の被保護世帯数及び実人員", #cityから変更 201028
+                         "local_government" = "...2", # municipalityから名前変更 201028
+                         "households_total" = "...4" , # 被保護世帯　総数
+                         "households_receive" = "...5", # 被保護世帯　現に保護を受けたもの
+                         "households_suspend" = "...6", # 被保護世帯 保護停止中のもの
+                         "persons_total" = "...7", # 被保護実人員　総数
+                         "persons_receive" = "...8", # 被保護実人員　現に保護を受けたもの
+                         "persons_suspend" = "...9", # 被保護実人員　保護停止中のもの
+                         "households_start" = "...10", # 保護開始世帯数
+                         "households_end" = "...11" ) # 保護廃止世帯数
+
+# Attach national-gov data to the row of local-gov data / local_governmentと同じ列に全国を追加する
+hogo_raw_2017jan_2020sep <- hogo_raw_2017jan_2020sep %>% 
+  dplyr::mutate(local_government = case_when(
+  title == "全国" ~ "全国",
+  TRUE ~ hogo_raw_2017jan_2020sep$local_government))
+
+# Delete unnecessary rows / 無用な列("...3")を削除
+hogo_raw_2017jan_2020sep <- hogo_raw_2017jan_2020sep %>% 
+  dplyr::select(-title, -"...3")
+
+# Delete NA in "local government"/ "local government"の変数がNAの行を削除
+hogo_raw_2017jan_2020sep <- hogo_raw_2017jan_2020sep %>% 
+  drop_na(local_government)
+
+```
+
+## Read and preprocess regional code / 地域コードの読みこみ・整理
+
+- In order to put the prefecture tag to the city data of public assistance data
+- 生保データの市データに都道府県タグをつけるため
+
+```{r}
+# Read from excel
+region_code <- readxl::read_excel("input/region_code.xls")
+
+# Convert to English name / 変数名 変換
+region_code <- region_code %>% 
+  dplyr::rename("local_government" = "市区町村名\n（漢字）",
+                                     "prefec_kanji" = "都道府県名\n（漢字）") 
+
+# Delete unnecessary variable / いらない変数削除
+region_code　<- region_code %>% 
+  dplyr::select(-"団体コード",-"都道府県名\n（カナ）", -"市区町村名\n（カナ）")
+
+# Remove "都道府県" characters from prefec_kanji / prefec_kanjiが"都道府県"を含むため除去 20201023
+region_code <- region_code %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "県", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji,  "府", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "東京都", "東京"))
+```
+
+
+## Join Public Assistance data to regional data / 生活保護データに地域コードを統合・整理
+
+- Data frame named as "hogo_region_2017jan_2020sep"
+- "hogo_region_2017jan_2020sep"というdata frameで整理
+
+```{r}
+# Join Public Assistance data to regional data / 生活保護データに地域コードデータを統合
+hogo_region_2017jan_2020sep <- dplyr::left_join(hogo_raw_2017jan_2020sep, region_code, by = "local_government")
+
+# Reorder variables
+hogo_region_2017jan_2020sep　<- hogo_region_2017jan_2020sep[c("year_month", 
+                                                             "local_government", 
+                                                             "prefec_kanji",
+                                                             "households_total", 
+                                                             "households_receive",
+                                                             "households_suspend", 
+                                                             "persons_total", 
+                                                             "persons_receive",
+                                                             "persons_suspend",
+                                                             "households_start",
+                                                             "households_end")]
+
+# Construct prefecture variables using coalesce: replacing NA in "prefecture" by "municipality" 
+# https://www.rdocumentation.org/packages/dplyr/versions/0.7.8/topics/coalesce
+hogo_region_2017jan_2020sep <- hogo_region_2017jan_2020sep %>% 
+  dplyr::mutate(prefec_kanji = coalesce(prefec_kanji, local_government))
+
+```
+
+## Aggregate data by prefecture/生活保護データを都道府県単位に集計
+
+- Data frame as "hogo_sum_2017jan_2020sep"
+- "hogo_sum_2017jan_2020sep"というdata frameで整理
+
+```{r}
+# Aggregate data within prefectures and month
+hogo_sum_2017jan_2020sep <- hogo_region_2017jan_2020sep %>% 
+  dplyr::group_by(prefec_kanji, year_month) %>%
+  dplyr::summarise(households_total = sum(households_total),
+                   households_receive = sum(households_receive),
+                   households_suspend = sum(households_suspend),
+                   persons_total = sum(persons_total),
+                   persons_receive = sum(persons_receive),
+                   persons_suspend = sum(persons_suspend),
+                   households_start = sum(households_start),
+                   households_end = sum(households_end)) %>% 
+  dplyr::ungroup() 
+
+# Rename variable "201023"
+hogo_sum_2017jan_2020sep <- hogo_sum_2017jan_2020sep %>% 
+  dplyr::rename("date" = "year_month")
+
+# Join with prefecture ID
+hogo_sum_2017jan_2020sep <-  dplyr::left_join(hogo_sum_2017jan_2020sep, prefec_id, by = "prefec_kanji") #201023
+
+# Extrac year and month data and convert to numeric / yearとmonthを抽出・作成してnumericに変換
+hogo_sum_2017jan_2020sep <- hogo_sum_2017jan_2020sep %>% 
+  mutate(year = as.numeric(stringr::str_sub(date, start=1, end=4))) %>%
+  mutate(month = as.numeric(stringr::str_sub(date, start=6, end=7))) 
+
+```
+
+## One-year lag and year-on-tear/1年ラグ変数および前年同月差の作成
+
+```{r}
+# 2021Aug13
+# One-year lag and year-on-tear / 1年ラグ変数および前年同月差の作成
+hogo_sum_2017jan_2020sep <- hogo_sum_2017jan_2020sep %>%
+  dplyr::group_by(id, month) %>%
+  mutate(year_lag_households_receive = dplyr::lag(households_receive, order_by = year)) %>% #within id and monthでyearのlag
+  mutate(yoy_households_receive = households_receive - year_lag_households_receive) %>%
+  mutate(year_lag_persons_receive = dplyr::lag(persons_receive, order_by = year))　%>% #within id and monthでyearのlag
+  mutate(yoy_persons_receive = persons_receive - year_lag_persons_receive) %>% 
+  dplyr::ungroup() 
+  
+# Visual check / 目視でcheck
+hogo_sum_2017jan_2020sep_check <- hogo_sum_2017jan_2020sep %>% 
+  select(prefec_kanji, date, id, year, month, 
+         households_receive, year_lag_households_receive, yoy_households_receive,
+         persons_receive, year_lag_persons_receive, yoy_persons_receive)
+```
+
+
+## Public Assistance per 100,000 population / 人口10万人当たり生活保護データ
+
+```{r}
+# Join population data / 人口データを統合
+hogo_sum_2017jan_2020sep <- dplyr::left_join(hogo_sum_2017jan_2020sep, df_population, 
+                                       by = c("prefec_kanji", "prefec", "id", "year")) #201022
+
+# Data per 100 thousand / 人口10万人あたりデータの作成 # 2021Jan29
+hogo_sum_percapita <- hogo_sum_2017jan_2020sep %>%
+  dplyr::mutate(across(households_total:households_end,
+                ~(.x /population_total * 100))) # per 100 thousand population
+```
+
+## Year-on-year recipient households and recipients / 受給世帯・受給者数（人口千人あたり）の前年同月差
+
+- Only people who actually received (_receive)
+- 実際に保護を受けたもの（_receive)のみ算出
+
+```{r}
+
+# One-year lag and year-on-tear / 1年ラグ変数および前年同月差の作成
+hogo_sum_percapita <- hogo_sum_percapita %>%
+  dplyr::group_by(id, month) %>%
+  mutate(year_lag_households_receive = dplyr::lag(households_receive, order_by = year))　%>% #within id and monthでyearのlag
+  mutate(yoy_households_receive = households_receive - year_lag_households_receive) %>%
+  mutate(year_lag_persons_receive = dplyr::lag(persons_receive, order_by = year))　%>% #within id and monthでyearのlag
+  mutate(yoy_persons_receive = persons_receive - year_lag_persons_receive) %>% 
+  dplyr::ungroup() 
+  
+# Visual check / 目視でcheck
+hogo_sum_percapita_check <- hogo_sum_percapita %>% 
+  select(prefec_kanji, date, id, year, month, 
+         households_receive, year_lag_households_receive, yoy_households_receive,
+         persons_receive, year_lag_persons_receive, yoy_persons_receive)
+
+```
+
+## National YOY data for Public Assistance data
+
+### Recipients and recipient households/被保護者数と被保護者世帯数
+
+- Make level data and YOY data 
+- レベルデータとYOYデータの全国データの作成と取り出し
+
+```{r}
+# 2021Aug13
+# one-year lag and year-on-year data / 1年ラグ変数および前年同月差の作成
+# "hogo_sum_2017jan_2020sep" is the data frame before making "per capita"
+
+hogo_sum_for_graph <- hogo_sum_2017jan_2020sep %>%　
+  dplyr::group_by(id, month) %>%
+  mutate(year_lag_households_receive = dplyr::lag(households_receive, order_by = year))　%>% #within id and monthでyearのlag
+  mutate(yoy_households_receive = households_receive - year_lag_households_receive) %>%
+  mutate(year_lag_persons_receive = dplyr::lag(persons_receive, order_by = year))　%>% #within id and monthでyearのlag
+  mutate(yoy_persons_receive = persons_receive - year_lag_persons_receive) %>% 
+  dplyr::ungroup() 
+  
+# Visual check / 目視でcheck
+hogo_sum_for_graph_check <- hogo_sum_for_graph %>% 
+  select(prefec_kanji, date, id, year, month, 
+         households_receive, year_lag_households_receive, yoy_households_receive,
+         persons_receive, year_lag_persons_receive, yoy_persons_receive)
+
+# keep only necessary variables and data (id=99=all japan)
+hogo_sum_for_graph <- hogo_sum_for_graph %>% 
+  select(date, id, year, month, 
+         households_receive, yoy_households_receive,
+         persons_receive, yoy_persons_receive) %>%
+  filter(id == 99)
+
+# Attach variables to "_zenkoku" ("national")
+hogo_sum_for_graph <- hogo_sum_for_graph %>% 
+  rename(households_receive_zenkoku = households_receive) %>%
+  rename(yoy_households_receive_zenkoku = yoy_households_receive) %>%
+  rename(persons_receive_zenkoku = persons_receive) %>%
+  rename(yoy_persons_receive_zenkoku = yoy_persons_receive) 
+```
+
+### Recipient households by household type (national data)/世帯類型別の被保護世帯数（全国データのみ）
+
+- National Survey on Public Assistance Recipients, Table 3, recipient households by recipient types
+- 被保護者調査（令和３年３月分概数） 表３ 世帯類型別現に保護を受けた世帯数
+https://www.mhlw.go.jp/toukei/saikin/hw/hihogosya/m2021/03.html
+
+- data is manually constructed and saved as a CSV file "yoy_hogo_households_receive_by_type.csv"
+- データは"yoy_hogo_households_receive_by_type.csv"として手作業で作成されている。
+
+```{r}
+# Recipient households by household types (year-on-year), national data  2021Mar5
+# 「6.2 世帯類型別の受給世帯数用（対前年差）
+
+yoy_hogo_households_receive_by_type <-
+  readr::read_csv("output/yoy_hogo_households_receive_by_type.csv")
+
+# Convert to English names
+yoy_hogo_households_receive_by_type　<-
+  yoy_hogo_households_receive_by_type %>% 
+  dplyr::rename(year = "西暦") %>% 
+  dplyr::rename(month = "月") %>%
+  dplyr::rename(yoy_households_receive_elderly_zenkoku = "高齢者世帯") %>% 
+  dplyr::rename(yoy_households_receive_singlemother_zenkoku = "母子世帯") %>%
+  dplyr::rename(yoy_households_receive_disabled_zenkoku = "障害者世帯") %>%
+  dplyr::rename(yoy_households_receive_sick_zenkoku = "傷病者世帯") %>%
+  dplyr::rename(yoy_households_receive_others_zenkoku  = "その他の世帯") 
+
+# ID=99
+yoy_hogo_households_receive_by_type　<-
+  yoy_hogo_households_receive_by_type %>% dplyr::mutate(id = 99)　#2021Aug3waki 99=全国
+
+# Put date info
+yoy_hogo_households_receive_by_type$date <-
+  as.Date(yoy_hogo_households_receive_by_type$date)
+```
+
+### Join national data for graph/グラフ用全国データの結合
+
+```{r}
+# Join data/データの結合
+hogo_sum_2017jan_2020sep <- hogo_sum_2017jan_2020sep %>%  
+ dplyr::left_join(hogo_sum_for_graph, by = c("month", "year", "date", "id")) %>%
+ dplyr::left_join(yoy_hogo_households_receive_by_type, by = c("month", "year", "date", "id")) 
+  
+```
+
+# Unemployment benefit outcomes/失業給付アウトカム
+
+## Read unemployment benefit recipients/一般被保険者の求職者給付状況:受給者実人員および支給金額の計男女のデータ(2017.1-2020.9)
+
+2020.11.25追加
+
+- Monthly/Annual reports on unemployment insurance/雇用保険事業月報・年報
+ 
+- FY2017/2017年度 https://www.mhlw.go.jp/bunya/koyou/koyouhoken19/150-1b.html
+- FY2018/2018年度 https://www.mhlw.go.jp/bunya/koyou/koyouhoken20/150-1b.html
+- FY2019/2019年度 https://www.mhlw.go.jp/bunya/koyou/koyouhoken21/150-1b.html
+- FY2020/2020年度 https://www.mhlw.go.jp/bunya/koyou/koyouhoken22/150-1b.html
+- e-stat https://www.e-stat.go.jp/stat-search/files?page=1&toukei=00450223&tstat=000001072473&result_page=1 
+
+- Table 5, B, Basic benefits, populations, benefits YEN, total-men-women
+- Level data and YOY data between 2017.1-2020.9
+
+- 「第5表　都道府県労働局別一般被保険者の求職者給付状況	〔 Ｂ　基本手当（延長給付を除く） 〕 受給者実人員(単位：人）) 支給金額（単位：円） 計男女」より、受給者実人員および支給金額の計男女のデータを2017.1-2020.9まで整理。2017.1-2020.9までの生データおよび前年同期差（YOY)のデータを作成。
+
+
+```{r}
+# 20201124
+# Read the whole CSV files in one folder / フォルダ内のcsvファイルの一括読み込み
+
+## Read/一括読み込み
+## koyo_hoken_data_csv is the subfolder that contains the csv data of unemployment benefits
+## purrr::map_dfr(.x, .f, ..., .id = NULL)：結果をdplyr::bind_rows()で結合したdata.frameとして返すmap亜種。
+files = fs::dir_ls(path = file.path("output/koyo_hoken_data_csv"),
+                   glob = "*.csv")
+
+## Join all the CSV files / よみこんだfilesを結合
+koyo_hoken_2017jan_2020sep = purrr::map_dfr(files, read_csv)
+```
+
+
+## Preprocess Unemployment benefit recipients/一般被保険者の求職者給付状況 (2018.1-2020.9)
+
+2020.11.25
+- Unemployment benefit recipients and benefit amounts, total, men, women
+- 受給者実人員および支給金額の計男女のデータ
+
+```{r}
+# Add year variable/年変数の追加 
+koyo_hoken_2017jan_2020sep <- koyo_hoken_2017jan_2020sep %>% 
+  dplyr::mutate(year = koyo_hoken_2017jan_2020sep$year_month %>% stringr::str_sub(1, 4))
+
+# Add month variable/月変数の追加
+koyo_hoken_2017jan_2020sep <- koyo_hoken_2017jan_2020sep %>% 
+  dplyr::mutate(month = koyo_hoken_2017jan_2020sep$year_month %>% stringr::str_sub(6, 7)) 
+
+# Convert to English names
+koyo_hoken_2017jan_2020sep <- koyo_hoken_2017jan_2020sep %>% 
+  dplyr::rename("prefec_zenkaku" = "都道府県", #2021Jan29 > 名前修正21Jul30: prefec=ローマ字、prefec_kanji="都道府県"付きの漢字としてすでに存在するため
+                "unemp_benefit_number_total" =  "受給者実人数_計",
+                "unemp_benefit_number_male" = "受給者実人員_男",
+                "unemp_benefit_number_female" = "受給者実人員_女",
+                "unemp_benefit_yen_total" = "支給金額_計",
+                "unemp_benefit_yen_male"  = "支給金額_男",
+                "unemp_benefit_yen_female" = "支給金額_女",
+                "date" = "year_month")
+
+# Read Kanji and ID data / 漢字データとidデータの読み込み
+## Change df name from prefec_id to prefec_id_zenaku (prefec_id already exists)
+## df名をprefec_idからprefec_id_zenkakuに変更 21Jul30 (prefec_idはすでにあるため)
+
+prefec_id_zenkaku <- readxl::read_excel("input/prefec_id_zenkaku.xlsx")
+
+# Add ID / IDの付与
+## 元のエクセルデータの名前もprefecからprefec_zenkakuに変更 21Jul30
+koyo_hoken_2017jan_2020sep <- koyo_hoken_2017jan_2020sep %>% dplyr::left_join(prefec_id_zenkaku, by = "prefec_zenkaku")
+
+# yearとmonthをnumericに変換
+koyo_hoken_2017jan_2020sep$year <- as.numeric(koyo_hoken_2017jan_2020sep$year)
+koyo_hoken_2017jan_2020sep$month <- as.numeric(koyo_hoken_2017jan_2020sep$month)
+
+```
+
+## Join population data 
+```{r}
+# Join population data to unemployment benefit data
+koyo_hoken_2017jan_2020sep <- dplyr::left_join(koyo_hoken_2017jan_2020sep, df_population, by = c("id", "year"))
+```
+
+## Make year-on-year data/YOYデータの作成
+```{r}
+# Make a data frame
+koyo_hoken_2017jan_2020sep_yoy <- koyo_hoken_2017jan_2020sep
+
+# 2021Nov4
+# One-year lag and year-on-year diff/1年ラグ変数および前年同月差の作成
+koyo_hoken_2017jan_2020sep_yoy <- koyo_hoken_2017jan_2020sep_yoy %>%
+  dplyr::group_by(id, month) %>%
+  dplyr::mutate(year_lag_unemp_benefit_number_total　# number, total
+         = dplyr::lag(unemp_benefit_number_total, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_number_total
+         = unemp_benefit_number_total - year_lag_unemp_benefit_number_total) %>%
+  dplyr::mutate(year_lag_unemp_benefit_number_female 　# number, female
+         = dplyr::lag(unemp_benefit_number_female, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_number_female
+         = unemp_benefit_number_female - year_lag_unemp_benefit_number_female) %>%
+  dplyr::mutate(year_lag_unemp_benefit_number_male 　# number, male
+         = dplyr::lag(unemp_benefit_number_male, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_number_male
+         = unemp_benefit_number_male - year_lag_unemp_benefit_number_male) %>%
+  dplyr::mutate(year_lag_unemp_benefit_yen_total 　# yen, total
+         = dplyr::lag(unemp_benefit_yen_total, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_yen_total
+         = unemp_benefit_yen_total - year_lag_unemp_benefit_yen_total)　%>%
+  dplyr::mutate(year_lag_unemp_benefit_yen_female 　# yen, female
+         = dplyr::lag(unemp_benefit_yen_female, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_yen_female
+         = unemp_benefit_yen_female - year_lag_unemp_benefit_yen_female) %>%
+  dplyr::mutate(year_lag_unemp_benefit_yen_male 　# yen, male
+         = dplyr::lag(unemp_benefit_yen_male, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_yen_male
+         = unemp_benefit_yen_male - year_lag_unemp_benefit_yen_male) %>% 
+  dplyr::ungroup() 
+
+# drop unnecessary variables
+koyo_hoken_2017jan_2020sep_yoy <- koyo_hoken_2017jan_2020sep_yoy %>%
+  dplyr::select(-c(year_lag_unemp_benefit_number_total, year_lag_unemp_benefit_number_female,
+                   year_lag_unemp_benefit_number_male, year_lag_unemp_benefit_yen_total,
+                   year_lag_unemp_benefit_yen_female, year_lag_unemp_benefit_yen_male))
+```
+
+## Convert to Per 100,000/10万人あたりに変換
+
+```{r}
+# Recipients per 100,000 pop and benefits per 1000 pop/人口10万人あたりの受給者数および人口千人あたり金額データの作成
+koyo_hoken_2017jan_2020sep_percapita <- koyo_hoken_2017jan_2020sep %>%
+dplyr::mutate(unemp_benefit_number_total = 
+              unemp_benefit_number_total / population_total * 100) %>%  # number, total
+dplyr::mutate(unemp_benefit_number_female = 
+              unemp_benefit_number_female / population_female * 100) %>%   # number, female
+dplyr::mutate(unemp_benefit_number_male = 
+              unemp_benefit_number_male / population_male * 100) %>%  # number, male
+dplyr::mutate(unemp_benefit_yen_total = 
+              unemp_benefit_yen_total / population_total) %>% # yen, total
+dplyr::mutate(unemp_benefit_yen_female =
+              unemp_benefit_yen_female / population_female) %>%  # yen, female
+dplyr::mutate(unemp_benefit_yen_male = 
+              unemp_benefit_yen_male / population_male)  # yen, male
+```
+
+## Make lag and year-on-year/ラグと前年同月差の作成
+
+```{r}
+# Make one-year lag and year-on-year variables / 1年ラグ変数および前年同月差の作成
+koyo_hoken_2017jan_2020sep_percapita <- koyo_hoken_2017jan_2020sep_percapita %>%
+  dplyr::group_by(id, month) %>%
+  dplyr::mutate(year_lag_unemp_benefit_number_total　# number, total
+         = dplyr::lag(unemp_benefit_number_total, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_number_total
+         = unemp_benefit_number_total - year_lag_unemp_benefit_number_total) %>%
+  dplyr::mutate(year_lag_unemp_benefit_number_female 　# number, female
+         = dplyr::lag(unemp_benefit_number_female, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_number_female
+         = unemp_benefit_number_female - year_lag_unemp_benefit_number_female) %>%
+  dplyr::mutate(year_lag_unemp_benefit_number_male 　# number, male
+         = dplyr::lag(unemp_benefit_number_male, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_number_male
+         = unemp_benefit_number_male - year_lag_unemp_benefit_number_male) %>%
+  dplyr::mutate(year_lag_unemp_benefit_yen_total 　# yen, total
+         = dplyr::lag(unemp_benefit_yen_total, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_yen_total
+         = unemp_benefit_yen_total - year_lag_unemp_benefit_yen_total)　%>%
+  dplyr::mutate(year_lag_unemp_benefit_yen_female 　# yen, female
+         = dplyr::lag(unemp_benefit_yen_female, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_yen_female
+         = unemp_benefit_yen_female - year_lag_unemp_benefit_yen_female) %>%
+  dplyr::mutate(year_lag_unemp_benefit_yen_male 　# yen, male
+         = dplyr::lag(unemp_benefit_yen_male, order_by = year))　%>% #within id and monthでyearのlag
+  dplyr::mutate(yoy_unemp_benefit_yen_male
+         = unemp_benefit_yen_male - year_lag_unemp_benefit_yen_male) %>% 
+  dplyr::ungroup() 
+  
+# Visual check / 目視でcheck
+koyo_hoken_2017jan_2020sep_check <- koyo_hoken_2017jan_2020sep_percapita %>% 
+  select(prefec, date, id, year, month, 
+         unemp_benefit_number_total, year_lag_unemp_benefit_number_total, yoy_unemp_benefit_number_total,
+         unemp_benefit_number_female, year_lag_unemp_benefit_number_female, yoy_unemp_benefit_number_female,
+         unemp_benefit_number_male, year_lag_unemp_benefit_number_male, yoy_unemp_benefit_number_male, 
+         unemp_benefit_yen_total, year_lag_unemp_benefit_yen_total, yoy_unemp_benefit_yen_total,
+         unemp_benefit_yen_female, year_lag_unemp_benefit_yen_female, yoy_unemp_benefit_yen_female,
+         unemp_benefit_yen_male, year_lag_unemp_benefit_yen_male, yoy_unemp_benefit_yen_male) %>%
+  dplyr::arrange(id)
+
+# Extract raw data and year-on-year data/生データおよび前年同月差データの取りだし
+koyo_hoken_2017jan_2020sep_percapita_select <- koyo_hoken_2017jan_2020sep_percapita %>% 
+  select(date, id, month,
+         unemp_benefit_number_total, yoy_unemp_benefit_number_total,
+         unemp_benefit_number_female, yoy_unemp_benefit_number_female,
+         unemp_benefit_number_male, yoy_unemp_benefit_number_male, 
+         unemp_benefit_yen_total,  yoy_unemp_benefit_yen_total,
+         unemp_benefit_yen_female,  yoy_unemp_benefit_yen_female,
+         unemp_benefit_yen_male, yoy_unemp_benefit_yen_male)
+ 
+```
+
+# Read and preprocess suicide data (Stata dta)/ 自殺率(dtaデータ）の読み込みと修正
+
+- Read suicide data("panel_suicide_kyujin.dta")
+- Jobs-to-applicant ratio and "full-time" employment ratio is moved to "preprocess_treatment.Rmd"
+- 自殺（と有効求人倍率/有効求職者数）データを取り込む
+- 有効求人倍率/有効求職者数はpreprocess_treatmentに移行(210312)
+
+```{r}
+# Read suicide data / 自殺率データの取り込み
+panel_suicide <- haven::read_dta("output/panel_suicide_kyujin.dta") #201206
+
+# "date" variable / "date"変数作成
+panel_suicide <- panel_suicide %>%
+  dplyr::mutate(date = as.Date(stringr::str_c(year, month, "01", sep = "-")))
+
+# Convert to English manes / 変数名の英語化 #2021Jan29 自殺者英語名変更
+panel_suicide <- panel_suicide %>% 
+  dplyr::rename("prefec_kanji" = "都道府県",
+                "kyujin_bairitsu" = "有効求人倍率",
+                "suicide_total" = "自殺者数_合計",
+                "suicide_female" = "自殺者数_女",
+                "suicide_male" = "自殺者数_男",
+                "suicide_rate"="suicide_rate_mhlw",#210304 MHLW版は2019は速報値であることが判明。合計なら警視庁統計に確定版あり
+                "suicide_rate_male"="suicide_rate_male_mhlw",　
+                "suicide_rate_female"="suicide_rate_female_mhlw",
+                "yoy_suicide_rate" = "yoy_suicide_rate_mhlw",
+                "yoy_suicide_rate_female" = "yoy_suicide_rate_female_mhlw",
+                "yoy_suicide_rate_male" = "yoy_suicide_rate_male_mhlw",
+                "yo3y_suicide_rate" = "yo3y_suicide_rate_mhlw",
+                "yo3y_suicide_rate_female" = "yo3y_suicide_rate_female_mhlw",
+                "yo3y_suicide_rate_male" = "yo3y_suicide_rate_male_mhlw",
+                #"suicide_rate_police" = "suicide_rate_police", # 210304追加　変数名は変更なし。警視庁統計(2019年確定版)
+                #"yoy_suicide_rate_police" = "yoy_suicide_rate_police", # 210304追加。変数名は変更なし。警視庁統計(2019年確定版）
+                "job_seeker_male" = "有効求職者数_男",
+                "job_seeker_female" = "有効求職者数_女")
+
+# Make year lag and year-on-year variables
+panel_suicide <- panel_suicide %>%
+    dplyr::group_by(id, month) %>%
+    dplyr::mutate(year_lag_suicide_total　# number, total
+         = dplyr::lag(suicide_total, order_by = year))%>%
+    dplyr::mutate(yoy_suicide_total
+         = suicide_total - year_lag_suicide_total) %>%
+  
+    dplyr::mutate(year_lag_suicide_male　# number, male
+         = dplyr::lag(suicide_male, order_by = year))%>%
+    dplyr::mutate(yoy_suicide_male
+         = suicide_male - year_lag_suicide_male) %>%
+  
+    dplyr::mutate(year_lag_suicide_female　# number, female
+         = dplyr::lag(suicide_female, order_by = year))%>%
+    dplyr::mutate(yoy_suicide_female
+         = suicide_female - year_lag_suicide_female) %>% 
+  dplyr::ungroup() 
+
+# Delete "都府県" and spaces / 都道府県名の感じから"都府県"の削除と空白（2020年9月にある）の削除
+panel_suicide <- panel_suicide %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "県", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji,  "府", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "東京都", "東京")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "　", ""))
+
+# Delete year before 2017 / 2017年以前の削除
+panel_suicide <- panel_suicide  %>% 
+  dplyr::filter(year >= 2017) #2021Jul23Waki 2017年以降のデータを使用
+
+```
+
+# Join outcome data/アウトカムデータの結合
+
+```{r}
+# Join safety net date to suicide data / 自殺データに生活保護と住宅確保・貸与データと失業手当を統合
+panel_outcomes <- panel_suicide %>%
+  dplyr::left_join(hogo_sum_percapita,  # Public assistance/生活保護
+                   by = c("date","prefec_kanji", 
+                          "id", "year", "month")) %>%
+  dplyr::left_join(koguchi_sogo_jukyo_percapita,  #2nd-tier safety net/住居確保と貸与
+                   by = c("date","prefec_kanji", "prefec",
+                          "id", "year", "month",
+                          "population_total", "population_male", "population_female")) %>%
+  dplyr::left_join(koyo_hoken_2017jan_2020sep_percapita_select,　#Unemployment benefits/失業手当（雇用保険）
+                   by = c("id", "date", "month")) %>%
+  dplyr::filter(id != 99) #全国データ削除
+```
+
+# Extract and save national data for time-series graphs/時系列グラフ用の全国データの抽出と保存
+
+```{r}
+# time_series_graph.Rmd用 #2021Feb16
+
+## National data of second-tier safety net / 貸付（緊急小口と総合支援）と住居確保給付金の全国データ
+koguchi_sogo_jukyo_2019jan_2020dec_zenkoku <- koguchi_sogo_jukyo_2019jan_2020dec %>% dplyr::filter(id == 99)
+
+## Natinal data of public assistance/生活保護の全国データ
+hogo_sum_2017jan_2020sep_zenkoku <- hogo_sum_2017jan_2020sep %>% dplyr::filter(id == 99) #2021Aug13
+
+## Join 2nd-tier safety net and public assistance /貸付・住居確保と生活保護の全国データの統合
+kokugchi_sogo_jukyo_hogo_2017jan_2020sep_zenkoku <- hogo_sum_2017jan_2020sep_zenkoku %>%
+  dplyr::left_join(koguchi_sogo_jukyo_2019jan_2020dec,
+                 by = c("prefec_kanji", "date", "prefec", "id", "year", "month", 
+                        "population_total", "population_male", "population_female"))
+
+# Unemployment benefit, raw YOY version / 雇用保険YOY  2021Nov4 
+koyo_hoken_2017jan_2020sep_zenkoku <- koyo_hoken_2017jan_2020sep_yoy %>% 
+  dplyr::filter(id == 99) %>% 
+  dplyr::select(-prefec)
+
+## Join unemployment benefit data to 2nd-tier and public assistance data/貸付・住居確保と生活保護と雇用保険の全国データの統合
+safety_net_zenkoku_2017jan_2020sep <- koyo_hoken_2017jan_2020sep_zenkoku %>%
+  dplyr::left_join(kokugchi_sogo_jukyo_hogo_2017jan_2020sep_zenkoku, 
+                   by = c("date", "year", "month", "id", "prefec_kanji", 
+                          "population_total", "population_male", "population_female"))
+
+## suicide data / 自殺の全国データ
+panel_suicide_zenkoku <- panel_suicide %>% dplyr::filter(id == 99)
+
+## Join suicide data to safety net data / 自殺とセーフティネットデータの全国データの統合
+time_series_data <- dplyr::left_join(panel_suicide_zenkoku, 
+                                     safety_net_zenkoku_2017jan_2020sep,
+                                     by = c("prefec_kanji", "id", "month", "date", "year"))
+
+## Delete unnecessary data / いらないデータの削除 2021Aug3
+time_series_data <- time_series_data %>% 
+  dplyr::select(-c(prefec_kanji, id, households_suspend, persons_suspend, 
+                   households_start, households_end, prefec, 
+                   population_total, population_male, population_female))
+
+## Labor force data / 労働力データの読みこみ
+labor_force_survey <- readxl::read_excel("input/labor_monthly_data_total.xlsx") 
+
+## Labor force variables / 労働力変数の作成
+labor_force_survey <- labor_force_survey %>% 
+  dplyr::mutate(employment_rate =  total_employed_person/total_population_over_15*100) %>% 
+  dplyr::mutate(labor_participation_rate = total_labor_force_population/total_population_over_15*100) %>% 
+  dplyr::mutate(unemployment_rate =  total_unemployed_person/total_labor_force_population*100)
+
+## Labor force variables / 労働力の必要な変数抽出
+labor_force_survey <- labor_force_survey %>% 
+  dplyr::select(date, total_labor_force_population, total_employed_person, 
+                total_population_over_15, total_unemployed_person, 
+                employment_rate, labor_participation_rate, unemployment_rate, jobs_to_applicants_ratio)
+
+## Join labor force data to the time series data / 全体データへの労働力データの統合
+time_series_data <- time_series_data %>% dplyr::left_join(labor_force_survey,by = "date")
+
+## Make time series data / 時系列化
+time_series_data$date <- as.Date(time_series_data$date)
+
+## Make "year_month" data / "year_month"データ作成  
+time_series_data <- time_series_data %>% 
+  dplyr::mutate(year_month = stringr::str_sub(date, start=1, end=7))
+
+## Save as csv / csv保存
+time_series_data  %>% readr::write_excel_csv("output/time_series_data.csv")
+```
+
+
+# Join outcome and treatment data/アウトカムデータと処置データの統合 (201207)
+
+- suicide panel data (monthly panel) and employment shock data (quarterly panel)
+- Employment shock data is preprocessed in preprocess_treatment.Rmd and saved as "df_emp_shock2020Q2.csv" and "df_emp_shock2019Q2.csv"
+- 自殺（と有効求人倍率）のパネルデータと雇用ショックデータ（四半期パネル）を分けて収集・整理
+- 雇用ショックデータはpreprocess_treatment.Rmdで整理してdf_emp_shock2020Q2.csvやdf_emp_shock2019Q2.csvとして保存したものを読みこむ
+
+## Read and join employment shock data (labor force)/雇用ショックデータ（労働力調査）の読み込みと統合
+
+- Join Cross-sectional treatment variables based on labor force survey to 
+- クロスセクションの処置変数とプラシボ処置変数 based on 労働力調査をStataのdtaからの有効求人倍率ショックやセーフティネットショック処置変数と統合
+
+```{r}
+# treatment var
+df_emp_shock2020Q2 <- read_csv("output/df_emp_shock2020Q2.csv") %>%
+  select(-c(year,quarter_number, year_quarter,quarterly, pop_over15))
+
+df_treatment <- df_emp_shock2020Q2 
+```
+
+## Join outcome and treatment variables / アウトカムと処置データの結合
+
+- Join cross-sectional data to monthly outcome panel data 
+- 月次アウトカムパネルデータの毎期に処置クロスセクションデータをleft joinする
+
+```{r}
+# Join data / データ結合
+df_analysis <- left_join(panel_outcomes, df_treatment, 
+                         by = c("prefecture", "id"))
+
+```
+
+## Add year-month numbers and year-month dummies/年月番号と年月ダミーの追加
+
+- "year_month" is already used, so "year_month_id" is used
+- year_monthは2020-09とか2020-09-01という変数で使っているため、year_month_idという名前に変更 2021.8.21 
+
+```{r}
+# 2001020 year-month data / 年月の数値データ
+
+# 2021Jul23 2018 data / 2018年データ反映用
+# 2021Jul30 2017 data / 2017年データ反映用
+df_analysis <- df_analysis %>% dplyr::mutate(year_month_id = case_when(
+  date == "2017-01-01" ~ 1,
+  date == "2017-02-01" ~ 2,
+  date == "2017-03-01" ~ 3,
+  date == "2017-04-01" ~ 4,
+  date == "2017-05-01" ~ 5,
+  date == "2017-06-01" ~ 6,
+  date == "2017-07-01" ~ 7,
+  date == "2017-08-01" ~ 8,
+  date == "2017-09-01" ~ 9,
+  date == "2017-10-01" ~ 10,
+  date == "2017-11-01" ~ 11,
+  date == "2017-12-01" ~ 12,
+  date == "2018-01-01" ~ 13,
+  date == "2018-02-01" ~ 14,
+  date == "2018-03-01" ~ 15,
+  date == "2018-04-01" ~ 16,
+  date == "2018-05-01" ~ 17,
+  date == "2018-06-01" ~ 18,
+  date == "2018-07-01" ~ 19,
+  date == "2018-08-01" ~ 20,
+  date == "2018-09-01" ~ 21,
+  date == "2018-10-01" ~ 22,
+  date == "2018-11-01" ~ 23,
+  date == "2018-12-01" ~ 24,
+  date == "2019-01-01" ~ 25,
+  date == "2019-02-01" ~ 26,
+  date == "2019-03-01" ~ 27,
+  date == "2019-04-01" ~ 28,
+  date == "2019-05-01" ~ 29,
+  date == "2019-06-01" ~ 30,
+  date == "2019-07-01" ~ 31,
+  date == "2019-08-01" ~ 32,
+  date == "2019-09-01" ~ 33,
+  date == "2019-10-01" ~ 34,
+  date == "2019-11-01" ~ 35,
+  date == "2019-12-01" ~ 36,
+  date == "2020-01-01" ~ 37,
+  date == "2020-02-01" ~ 38,
+  date == "2020-03-01" ~ 39,
+  date == "2020-04-01" ~ 40,
+  date == "2020-05-01" ~ 41,
+  date == "2020-06-01" ~ 42,
+  date == "2020-07-01" ~ 43,
+  date == "2020-08-01" ~ 44,
+  date == "2020-09-01" ~ 45
+))
+
+# make year-month dummy data
+date_dummies <- df_analysis %>% dplyr::mutate(date = factor(date)) %>% 
+  makedummies::makedummies(col = "date", basal_level = TRUE) # もとのdfの変数は残らない
+
+# Extract and change year-month dummy data / 名前取り出しと変更
+colname_date <- colnames(date_dummies)
+colname_date <- colname_date %>% stringr::str_replace("-01", "") %>%
+                                 stringr::str_replace("-", "_")
+
+# return year-month dummy data / 名前の差戻し
+colnames(date_dummies) <- colname_date
+
+# Add Post-COVID quarter dummyの追加 2021Aug22
+# 2021.1 is "before COVID-19" and not inculded in Q1
+# ただし2021年1月はbefore COVID-19としてQ1に含めない
+date_dummies <- date_dummies %>%
+  dplyr::mutate(date_2020_Feb_Mar_dummy =  case_when(
+    (date_2020_02 == 1 | date_2020_03 == 1) ~ 1,
+    TRUE ~ 0))  %>%
+  dplyr::mutate(date_2020_Q2dummy =  case_when(
+    (date_2020_04 == 1 | date_2020_05 == 1 | date_2020_06 == 1) ~ 1,
+    TRUE ~ 0))  %>%
+  dplyr::mutate(date_2020_Q3dummy =  case_when(
+    (date_2020_07 == 1 | date_2020_08 == 1 | date_2020_09 == 1) ~ 1,
+    TRUE ~ 0))  
+
+# Add Post-COVID dummy 2021Sep11  
+date_dummies <- date_dummies %>%
+  dplyr::mutate(after_2020Jan_dummy =  case_when(
+      (date_2020_02 == 1 | 
+       date_2020_03 == 1 | 
+       date_2020_04 == 1 | 
+       date_2020_05 == 1 | 
+       date_2020_06 == 1 | 
+       date_2020_07 == 1 | 
+       date_2020_08 == 1 | 
+       date_2020_09 == 1) ~ 1,
+    TRUE ~ 0))
+  
+# bind to "df_analysis"    
+df_analysis <- dplyr::bind_cols(df_analysis, date_dummies) #2020/10/22 
+```
+
+# Rename treatment variables/処置変数の作成/名前変更
+
+```{r}
+df_analysis <- df_analysis %>%
+  mutate(unemploy_shock_diff2 = yoy_diff2_unemployment_rate) %>%
+  mutate(job_seeker_total_shock = yoy_diff2_job_seeker_total_rate)  #有効求職者数, 6月時点, main 2021Mar16
+```
+
+# Control variables/コントロール変数
+
+- Include pre-determined covariates for robustness ckecks
+
+## Add "infection_death_mobility2020Jun.csv"
+
+- June data
+
+```{r}
+# COVID-19 infection, death, and google mobility data 2021Aug3
+infection_death_mobility2020Jun <- readr::read_csv("output/infection_death_mobility2020Jun.csv") %>% 
+  dplyr::select(-c(prefec_kanji)) #文字化け対策
+
+# Extract only year = 2020
+df_population_2020 <- df_population %>% dplyr::filter(year == 2020) 
+
+# Join population data to infection-death-mobility data 
+infection_death_mobility2020Jun_pop <- infection_death_mobility2020Jun %>% 
+  dplyr::left_join(df_population_2020, by = c("id", "prefec", "year"))
+
+# Rename mobility data and make per capita data for infection and death varaibles / 感染と死亡は2020年の都道府県人口で割る
+infection_death_mobility2020Jun_pop <- infection_death_mobility2020Jun_pop %>% 
+    dplyr::mutate(google_mobility_index_2020jun = google_mobility_index_4vari_average) %>% 
+    dplyr::mutate(infection_rate_cumulative2020jun = confirmed_cases_cumulative / population_total*100) %>% 
+    dplyr::mutate(death_rate_cumulative2020jun = deaths_cumulative / population_total*100)
+
+# Delete variables that are common to "df_analysis" / df_analysisで共通する部分を除く。
+infection_death_mobility2020Jun_pop  <- infection_death_mobility2020Jun_pop %>% 
+  dplyr::select(-c(year, month, Date, day, population_total, population_male, population_female))
+```
+
+## Add "infection_death_mobility2020May.csv"
+
+- May data
+
+```{r}
+# COVID-19 infection, death, and google mobility data 2021Aug3
+infection_death_mobility2020May <- readr::read_csv("output/infection_death_mobility2020may.csv") %>% 
+  dplyr::select(-c(prefec_kanji)) #文字化け対策
+
+# Extract only year = 2020
+df_population_2020 <- df_population %>% dplyr::filter(year == 2020) 
+
+# Join population data to infection-death-mobility data 
+infection_death_mobility2020May_pop <- infection_death_mobility2020May %>% 
+  dplyr::left_join(df_population_2020, by = c("id", "prefec", "year"))
+
+# Rename mobility data and make per capita data for infection and death varaibles / 感染と死亡は2020年の都道府県人口で割る
+infection_death_mobility2020May_pop <- infection_death_mobility2020May_pop %>% 　
+    dplyr::mutate(google_mobility_index_2020may = google_mobility_index_4vari_average) %>% 
+    dplyr::mutate(infection_rate_cumulative2020may = confirmed_cases_cumulative / population_total*100) %>% 
+    dplyr::mutate(death_rate_cumulative2020may = deaths_cumulative / population_total*100)
+
+# Extract variables that are used in "df_analysis" / df_analysisで使う部分を取る。
+infection_death_mobility2020May_pop  <- infection_death_mobility2020May_pop %>%
+  dplyr::select(id,
+                google_mobility_index_2020may,
+                infection_rate_cumulative2020may,
+                death_rate_cumulative2020may)
+
+```
+
+## Add System of social and demographic statistics and Census / 社会人口統計と国勢調査の追加
+
+- Use csv that collects covaraites.
+- covariatesを集めて分析するRmdで作成したcsvを利用
+
+
+### Read covariates data
+
+```{r}
+df_covariate <- readr::read_csv("output/df_covariates.csv") 
+```
+
+### Join "df_covariate" and "infection_death_mobility" data
+
+# Use May data for google mobilitygoogle mobilityはJunではなくてMayを使う。21.9.27
+ 
+```{r}
+df_covariate_infection_death_mobility2020_pop <- df_covariate %>% 
+  dplyr::left_join(infection_death_mobility2020Jun_pop, by = c("id")) %>%
+  dplyr::left_join(infection_death_mobility2020May_pop, by = c("id")) 
+
+```
+
+# Join with df_analysis/df_anaysisと結合
+
+```{r}
+df_analysis <- df_analysis %>% 
+  dplyr::left_join(df_covariate_infection_death_mobility2020_pop,
+                   by = c("prefec_kanji", "id", "prefec"))
+```
+
+# Save data for analysis/分析用データの保存
+
+```{r}
+df_analysis <- df_analysis　 %>% dplyr::filter(year >= 2018)　# Delete 2017 data/参照月が2017年になるのを防ぐ 2021Aug3
+
+df_analysis %>% readr::write_excel_csv("output/df_analysis.csv")
+```
+
+# Covariate check/covaraitesチェック
+
+- Check covariates power and VIF
+- covariatesの説明力やVIFのチェック
+
+```{r}
+df_analysis_202001 <- df_analysis %>% filter(date == "2020-01-01")
+
+# eight covariatesの処置変数への説明力
+
+reg <-  lm(unemploy_shock_diff2 ~ 
+              google_mobility_index_2020may +
+              infection_rate_cumulative2020jun +
+              death_rate_cumulative2020jun +
+              Population_per_1_km_2_of_inhabitable_area +
+              Secondary_industry_ratio +
+              Tertiary_industry_ratio +
+              Total_population + 
+              Ratio_of_aged_population,
+              data = df_analysis_202001)
+
+texreg::screenreg(list(reg), include.ci = FALSE, digits = 3)
+
+car::vif(reg)
+
+# eight covariatesのVIFチェック
+
+reg <-  lm(suicide_total ~ 
+              unemploy_shock_diff2 +
+              google_mobility_index_2020may +
+              infection_rate_cumulative2020jun +
+              death_rate_cumulative2020jun +
+              Population_per_1_km_2_of_inhabitable_area +
+              Secondary_industry_ratio +
+              Tertiary_industry_ratio +
+              Total_population + 
+              Ratio_of_aged_population,
+              data = df_analysis_202001)
+
+
+texreg::screenreg(list(reg), include.ci = FALSE, digits = 3)
+
+car::vif(reg)
+
+```

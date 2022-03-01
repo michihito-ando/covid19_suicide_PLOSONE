@@ -1,0 +1,683 @@
+---
+title: "COVID-19 employment shock and second-tier safetynet"
+author: ""
+date: "`r Sys.Date()`"
+output:
+ html_document:
+    css : R_style.css
+    # theme: cosmo
+    highlight: haddock     # Rスクリプトのハイライト形式
+    code_folding: 'hide'  # Rコードの折りたたみ表示を設定
+    toc: TRUE
+    toc_depth: 3           # 見出しの表示とその深さを指定
+    toc_float: true        # 見出しを横に表示し続ける
+    number_sections: true # 見出しごとに番号を振る
+    df_print: paged        # head()の出力をnotebook的なものに（tibbleと相性良）
+    latex_engine: xelatex  # zxjatypeパッケージを使用するために変更
+    # fig_height: 4.5          # 画像サイズのデフォルトを設定
+    # fig_width: 8           # 画像サイズのデフォルトを設定
+    dev: png
+classoption: xelatex,ja=standard
+editor_options: 
+  chunk_output_type: console
+---
+
+# Rmd Settings
+```{r setup, include=FALSE}
+Sys.setenv(LANG = "en") #English
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+path <- getwd()
+
+setwd(path)
+
+# packages
+pacman::p_load(tidyverse, plotly,readxl,scales, extrafont,PerformanceAnalytics, GGally, patchwork, ggpubr, DT, estimatr, texreg,　modelsummary)
+
+# Font for windows and mac
+if (stringr::str_detect(path, pattern="D:")){ 
+  
+  theme_set(theme_gray(base_size = 10, base_family = "Arial"))        # For Windows
+
+ } else{
+  
+  theme_set(theme_gray(base_size = 10, base_family = "HiraginoSans-W3"))  # For Mac OS
+
+ }
+```
+
+# Contents
+- covid_on_unemp_benefit_numberのOLSとWLS
+
+
+# Read functions/関数の読み込み
+```{r}
+source("functions.R")
+```
+
+# Read data/分析用データの読み込み
+```{r}
+df_analysis <- readr::read_csv("output/df_analysis.csv")
+```
+
+# Y = emergency small amount funds/緊急小口の決定件数
+## OLS, no trends
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$koguchi_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results, include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_loan(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "koguchi_number_OLS")
+
+# graph
+graph_koguchi_number_OLS <- event_study_graph_2nd_safetynet(data = df_estimates,
+                                                graph_title = "koguchi_number_OLS")
+graph_koguchi_number_OLS 
+
+estimates_koguchi_number_OLS <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$koguchi_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results, include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_loan(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "koguchi_number_WLS")
+
+# graph
+graph_koguchi_number_WLS <- event_study_graph_2nd_safetynet(data = df_estimates,
+                                                graph_title = "koguchi_number_WLS")
+graph_koguchi_number_WLS 
+
+estimates_koguchi_number_WLS <- df_estimates 　 #for robustness check
+
+results_koguchi_number_WLS <- estimation_results # for only-post DID table
+```
+
+
+# Y = emergency small amount funds/緊急小口の決定件数 with covar
+
+## OLS, no trends
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$koguchi_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results, include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_loan(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "koguchi_number_OLS")
+
+# graph
+graph_koguchi_number_OLS_covar <- event_study_graph_2nd_safetynet(data = df_estimates,
+                                                graph_title = "koguchi_number_OLS")
+graph_koguchi_number_OLS_covar
+
+estimates_koguchi_number_OLS_covar <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$koguchi_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results, include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_loan(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "koguchi_number_WLS")
+
+# graph
+graph_koguchi_number_WLS_covar <- event_study_graph_2nd_safetynet(data = df_estimates,
+                                                graph_title = "koguchi_number_WLS")
+graph_koguchi_number_WLS_covar 
+
+estimates_koguchi_number_WLS_covar <- df_estimates 　 #for robustness check
+
+results_koguchi_number_WLS_covar <- estimation_results # for only-post DID table
+```
+
+
+
+
+
+# Y= general support funds/総合支援の決定件数
+
+## OLS, no trends
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$sogo_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results, include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_loan(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "sogo_number_OLS")
+
+# graph
+graph_sogo_number_OLS <- event_study_graph_2nd_safetynet(data = df_estimates,
+                                                graph_title = "sogo_number_OLS")
+graph_sogo_number_OLS 
+
+estimates_sogo_number_OLS <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$sogo_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results, include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_loan(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "sogo_number_WLS")
+
+# graph
+graph_sogo_number_WLS <- event_study_graph_2nd_safetynet(data = df_estimates,
+                                                graph_title = "sogo_number_WLS")
+graph_sogo_number_WLS 
+
+estimates_sogo_number_WLS <- df_estimates 　 #for robustness check
+
+results_sogo_number_WLS <- estimation_results # for only-post DID table
+```
+
+
+
+# Y= general support funds/総合支援の決定件数 with covar
+
+## OLS, no trends
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$sogo_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results, include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_loan(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "sogo_number_OLS")
+
+# graph
+graph_sogo_number_OLS_covar <- event_study_graph_2nd_safetynet(data = df_estimates,
+                                                graph_title = "sogo_number_OLS")
+graph_sogo_number_OLS_covar
+
+estimates_sogo_number_OLS_covar <- df_estimates 　 #for robustness check
+```
+
+## WLS, no trends
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$sogo_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results, include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_loan(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "sogo_number_WLS")
+
+# graph
+graph_sogo_number_WLS_covar <- event_study_graph_2nd_safetynet(data = df_estimates,
+                                                graph_title = "sogo_number_WLS")
+graph_sogo_number_WLS_covar
+
+estimates_sogo_number_WLS_covar <- df_estimates 　 #for robustness check
+
+results_sogo_number_WLS_covar <- estimation_results # for only-post DID table
+```
+
+
+
+# Y = housing security benefit/住居確保給付金の決定件数
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results  <- dynamic_DID_jukyo_OLS(dataset = df_analysis, 
+                    outcome_var = df_analysis$jukyo_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_jukyo(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "jukyo_number_OLS")
+
+# Event study graph
+graph_jukyo_number_OLS <- event_study_graph_jukyo(data = df_estimates,
+                                                graph_title = "jukyo_number_OLS")
+graph_jukyo_number_OLS 
+
+estimates_jukyo_number_OLS <- df_estimates 　 #for robustness check
+```
+
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results  <- dynamic_DID_jukyo_WLS(dataset = df_analysis, 
+                    outcome_var = df_analysis$jukyo_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_jukyo(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "jukyo_number_WLS")
+
+# Event study graph
+graph_jukyo_number_WLS <- event_study_graph_jukyo(data = df_estimates,
+                                                graph_title = "jukyo_number_WLS")
+graph_jukyo_number_WLS 
+
+estimates_jukyo_number_WLS <- df_estimates 　 #for robustness check
+
+results_jukyo_number_WLS <- estimation_results # for only-post DID table
+```
+
+
+
+# Y = housing security benefit/住居確保給付金の決定件数 with covar
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results  <- dynamic_DID_jukyo_OLS_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$jukyo_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_jukyo(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "jukyo_number_OLS")
+
+# Event study graph
+graph_jukyo_number_OLS_covar <- event_study_graph_jukyo(data = df_estimates,
+                                                graph_title = "jukyo_number_OLS")
+graph_jukyo_number_OLS_covar 
+
+estimates_jukyo_number_OLS_covar <- df_estimates 　 #for robustness check
+```
+
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results  <- dynamic_DID_jukyo_WLS_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$jukyo_number, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_jukyo(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "jukyo_number_WLS")
+
+# Event study graph
+graph_jukyo_number_WLS_covar <- event_study_graph_jukyo(data = df_estimates,
+                                                graph_title = "jukyo_number_WLS")
+graph_jukyo_number_WLS_covar
+
+estimates_jukyo_number_WLS_covar <- df_estimates 　 #for robustness check
+
+results_jukyo_number_WLS_covar <- estimation_results # for only-post DID table
+```
+
+
+# Merge outcome results/アウトカム結果の結合
+
+## emergency small amount funds/緊急小口
+```{r}
+#merge and label estimates data
+estimates_koguchi_number_bind <- dplyr::bind_rows(estimates_koguchi_number_OLS, 
+                                           　　　 estimates_koguchi_number_WLS)
+
+#change labels and reorder labels
+estimates_koguchi_number_bind <- estimates_labeling_poverty(estimates_koguchi_number_bind)
+
+#graph
+graph_koguchi_number_bind <- event_study_graph_bind_legend(data = estimates_koguchi_number_bind, 
+                                             graph_title = "Emergency Small Amount Funds") +
+  theme(legend.position = 'none')
+
+ggplotly(graph_koguchi_number_bind)
+```
+
+## emergency small amount funds/緊急小口 with covar
+```{r}
+#merge and label estimates data
+estimates_koguchi_number_bind <- dplyr::bind_rows(estimates_koguchi_number_OLS_covar, 
+                                           estimates_koguchi_number_WLS_covar)
+
+#change labels and reorder labels
+estimates_koguchi_number_bind <- estimates_labeling_poverty(estimates_koguchi_number_bind)
+
+#graph
+graph_koguchi_number_bind_covar <- event_study_graph_bind_legend(data = estimates_koguchi_number_bind, 
+                                             graph_title = "Emergency Small Amount Funds, with covariates") +
+  theme(legend.position = 'none')
+
+ggplotly(graph_koguchi_number_bind_covar)
+```
+
+
+## general support funds/総合支援
+```{r}
+#merge and label estimates data
+estimates_sogo_number_bind <- dplyr::bind_rows(estimates_sogo_number_OLS, 
+                                               estimates_sogo_number_WLS)
+
+#change labels and reorder labels
+estimates_sogo_number_bind <- estimates_labeling_poverty(estimates_sogo_number_bind)
+
+#graph
+graph_sogo_number_bind <- event_study_graph_bind_legend(data = estimates_sogo_number_bind, 
+                                             graph_title = "General Support Funds") + 
+  theme(legend.position = 'none')
+
+ggplotly(graph_sogo_number_bind)
+```
+
+## general support funds/総合支援 with covar
+```{r}
+#merge and label estimates data
+estimates_sogo_number_bind <- dplyr::bind_rows(estimates_sogo_number_OLS_covar, 
+                                               estimates_sogo_number_WLS_covar)
+
+#change labels and reorder labels
+estimates_sogo_number_bind <- estimates_labeling_poverty(estimates_sogo_number_bind)
+
+#graph
+graph_sogo_number_bind_covar <- event_study_graph_bind_legend(data = estimates_sogo_number_bind, 
+                                             graph_title = "General Support Funds, with covariates") +
+  theme(legend.position = 'none')
+
+ggplotly(graph_sogo_number_bind_covar)
+```
+
+
+## housing security benefit/居住確保給付金
+```{r}
+#merge and label estimates data
+estimates_jukyo_number_bind <- dplyr::bind_rows(estimates_jukyo_number_OLS, 
+                                                estimates_jukyo_number_WLS)
+
+#change labels and reorder labels
+estimates_jukyo_number_bind <- estimates_labeling_poverty(estimates_jukyo_number_bind)
+
+#graph
+graph_jukyo_number_bind <- event_study_graph_bind_legend(data = estimates_jukyo_number_bind, 
+                                             graph_title = "Housing Security Benefit") +
+  theme(legend.position = 'none')
+
+ggplotly(graph_jukyo_number_bind)
+```
+
+## housing security benefit/居住確保給付金 with covar
+```{r}
+#merge and label estimates data
+estimates_jukyo_number_bind <- dplyr::bind_rows(estimates_jukyo_number_OLS_covar, 
+                                                estimates_jukyo_number_WLS_covar)
+
+#change labels and reorder labels
+estimates_jukyo_number_bind <- estimates_labeling_poverty(estimates_jukyo_number_bind)
+
+#graph
+graph_jukyo_number_bind_covar <- event_study_graph_bind_legend(data = estimates_jukyo_number_bind, 
+                                             graph_title = "Housing Security Benefit, with covariates") +
+  theme(legend.position = 'none')
+
+ggplotly(graph_jukyo_number_bind_covar)
+```
+
+## GGplotly
+```{r}
+ggplotly(graph_koguchi_number_bind)
+ggplotly(graph_koguchi_number_bind_covar)
+ggplotly(graph_sogo_number_bind)
+ggplotly(graph_sogo_number_bind_covar)
+ggplotly(graph_jukyo_number_bind)
+ggplotly(graph_jukyo_number_bind_covar)
+```
+
+# Merge graphs/グラフ統合
+## Extract legend/legend取り出し
+```{r}
+#Legendの表示
+
+graph_for_legend  <-　graph_koguchi_number_bind +
+ theme(legend.position = 'bottom', # Adjust x axis label
+       legend.title = element_text(color = "black", size = 20),
+       legend.text = element_text(color = "black", size = 20))
+graph_for_legend  
+
+#extract legend
+legend_model_types <- ggpubr::get_legend(graph_for_legend)
+legend_model_types <- ggpubr::as_ggplot(legend_model_types)
+legend_model_types
+
+```
+
+## Merge/統合
+### graph size
+
+```{r}
+dpi_num <- 100
+width_num <- 15
+height_num <- 15
+```
+
+```{r}
+ymin <- - 200
+ymax <- 800
+
+ymin_num <- - 200
+ymax_num  <- 800
+interval <- 200
+```
+
+### WLS 
+```{r, fig.width = 10, fig.height = 15}
+graph_koguchi_number_WLS <- graph_koguchi_number_WLS + 
+  labs(title = "(a) Emergency Small Amount Funds") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_koguchi_number_WLS_covar <- graph_koguchi_number_WLS_covar + 
+  labs(title = "(b) Emergency Small Amount Funds, with covariates") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_sogo_number_WLS <- graph_sogo_number_WLS + 
+  labs(title =  "(c) General Support Funds")+ 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_sogo_number_WLS_covar <- graph_sogo_number_WLS_covar + 
+  labs(title = "(d) General Support Funds, with covariates") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_jukyo_number_WLS <- graph_jukyo_number_WLS + 
+  labs(title = "(e) Housing Security Benefit") + 
+  scale_y_continuous(limit = c(-50, 200), breaks=seq(-50, 200, 50))
+
+graph_jukyo_number_WLS_covar <- graph_jukyo_number_WLS_covar + 
+  labs(title = "(f) Housing Security Benefit, with covariates") + 
+  scale_y_continuous(limit = c(-50, 200), breaks=seq(-50, 200, 50))
+
+graph <- (graph_koguchi_number_WLS | graph_koguchi_number_WLS_covar) / 
+  (graph_sogo_number_WLS | graph_sogo_number_WLS_covar) /
+    (graph_jukyo_number_WLS | graph_jukyo_number_WLS_covar) 
+
+graph
+
+#保存
+ggsave(file = "output/graph_job_seeker_total_shock_on_2nd_safetynet_WLS.pdf", plot = graph, 
+       dpi = dpi_num, width = width_num, height = height_num)  
+```
+
+
+### Robustness check 
+```{r,fig.width = 12, fig.height = 10}
+# 2021Feb12Waki
+
+
+graph_koguchi_number_bind　 <- graph_koguchi_number_bind + 
+  labs(title = "(a) Emergency Small Amount Funds")　+ 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_koguchi_number_bind_covar　 <- graph_koguchi_number_bind_covar+ 
+  labs(title = "(b) Emergency Small Amount Funds, with covariates") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_sogo_number_bind　 <- graph_sogo_number_bind+ 
+  labs(title =  "(c) General Support Funds") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_sogo_number_bind_covar　 <- graph_sogo_number_bind_covar+ 
+  labs(title = "(d) General Support Funds, with covariates") + 
+  scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_jukyo_number_bind　 <- graph_jukyo_number_bind+ 
+  labs(title = "(e) Housing Security Benefit") + 
+  scale_y_continuous(limit = c(-50, 200), breaks=seq(-50, 200, 50))
+
+graph_jukyo_number_bind_covar　 <- 　graph_jukyo_number_bind_covar+ 
+  labs(title = "(f) Housing Security Benefit, with covariates") + 
+  scale_y_continuous(limit = c(-50, 200), breaks=seq(-50, 200, 50))
+
+graph_2nd_tier_diff_models <-  (graph_koguchi_number_bind + graph_koguchi_number_bind_covar)/
+                                (graph_sogo_number_bind + graph_sogo_number_bind_covar)/
+                                (graph_jukyo_number_bind + graph_jukyo_number_bind_covar)/legend_model_types + 
+plot_layout(heights = c(2,2,2, 0.5))  #0.3から0.5へ変更 2021Sep7 Waki
+ 
+ 
+graph_2nd_tier_diff_models
+
+#保存
+ggsave(file = "output/graph_job_seeker_total_shock_on_2nd_safetynet_robust.pdf", plot = graph_2nd_tier_diff_models, 
+       dpi = dpi_num, width = width_num, height = height_num)     
+
+```
+
+# Regression table/回帰結果表 without covar
+```{r, eval=FALSE}
+options("modelsummary_format_numeric_latex" = "plain")
+
+# 列の選択 column order
+
+# 緊急小口、総合支援、住居確保、YOYのみ, monthlyhのみ
+
+rows_MONTH <- tribble(~name, ~"(1)", ~"(2)", ~"(3)", ~"(4)", ~"(5)", ~"(6)", 
+"Ref. month", "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}",  "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}","\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}")
+
+## results list
+table_results_MONTH <- list()
+table_results_MONTH[["(1)"]] <- results_koguchi_number_WLS
+table_results_MONTH[["(2)"]] <- results_koguchi_number_WLS_onlypost
+table_results_MONTH[["(3)"]] <- results_sogo_number_WLS
+table_results_MONTH[["(4)"]] <- results_sogo_number_WLS_onlypost
+table_results_MONTH[["(5)"]] <- results_jukyo_number_WLS
+table_results_MONTH[["(6)"]] <- results_jukyo_number_WLS_onlypost
+
+## HTML table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      title_words = "UIbenefit",
+                      gof = gm,
+                      output_style = "html") %>%
+    kableExtra::add_header_above(c(" " = 1, "Emergency S.A." = 2, "General Support" = 2, "Housing Security" = 2))
+
+## Latex table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      gof = gm,
+                      title_words = "DID estimates for suicide rates\\label{tab:DID_unemploy_on_suicide}", 
+                      output_style = "latex") %>% 
+  kableExtra::add_header_above(c(" " = 1, "Emergency S.A." = 2, "General Support" = 2, "Housing Security" = 2)) %>%
+  kableExtra::add_footnote(c("Notes: Robust standard errors are clustered at the prefecture level and the number of clusters (i.e. prefectures) is 47. The treatment variable is the COVID-19-induced employment shock, which is calculated as equation \\eqref{eq:employment_shock}. Estimates are obtained based on equation \\eqref{eq:did_model_ver2} with WLS estimation weighted by prefecture population size."),threeparttable = TRUE, notation = "none",escape = FALSE) %>% 
+  kableExtra::column_spec(2:7, width = "1.5cm") %>% 
+  kableExtra::save_kable("output/job_seeker_total_shock_on_2nd_safetynet_robust_tables.tex")
+```
+
+# Regression table/回帰結果表 with covar
+
+```{r, eval=FALSE}
+# 列の選択 column order
+
+# 緊急小口、総合支援、住居確保、YOYのみ, monthlyhのみ
+
+rows_MONTH <- tribble(~name, ~"(1)", ~"(2)", ~"(3)", ~"(4)", ~"(5)", ~"(6)", 
+"Ref. month", "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}",  "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}","\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}")
+
+## results list
+table_results_MONTH <- list()
+table_results_MONTH[["(1)"]] <- results_koguchi_number_WLS_covar
+table_results_MONTH[["(2)"]] <- results_koguchi_number_WLS_covar_onlypost
+table_results_MONTH[["(3)"]] <- results_sogo_number_WLS_covar
+table_results_MONTH[["(4)"]] <- results_sogo_number_WLS_covar_onlypost
+table_results_MONTH[["(5)"]] <- results_jukyo_number_WLS_covar
+table_results_MONTH[["(6)"]] <- results_jukyo_number_WLS_covar_onlypost
+
+## HTML table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      title_words = "UIbenefit",
+                      gof = gm,
+                      output_style = "html") %>%
+    kableExtra::add_header_above(c(" " = 1, "Emergency S.A." = 2, "General Support" = 2, "Housing Security" = 2))
+
+## Latex table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      gof = gm,
+                      title_words = "DID estimates for suicide rates\\label{tab:DID_unemploy_on_suicide}", 
+                      output_style = "latex") %>% 
+  kableExtra::add_header_above(c(" " = 1, "Emergency S.A." = 2, "General Support" = 2, "Housing Security" = 2)) %>%
+  kableExtra::add_footnote(c("Notes: Robust standard errors are clustered at the prefecture level and the number of clusters (i.e. prefectures) is 47. The treatment variable is the COVID-19-induced employment shock, which is calculated as equation \\eqref{eq:employment_shock}. Estimates are obtained based on equation \\eqref{eq:did_model_ver2} with WLS estimation weighted by prefecture population size."),threeparttable = TRUE, notation = "none",escape = FALSE) %>% 
+  kableExtra::column_spec(2:7, width = "1.5cm") %>% 
+  kableExtra::save_kable("output/job_seeker_total_shock_on_2nd_safetynet_robust_covar_tables.tex")
+```
+

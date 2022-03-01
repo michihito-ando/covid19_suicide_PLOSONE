@@ -1,0 +1,2024 @@
+---
+title: "COVID-19 employment shock and suicide"
+author: ""
+date: "`r Sys.Date()`"
+output:
+ html_document:
+    css : R_style.css
+    # theme: cosmo
+    highlight: haddock     # Rスクリプトのハイライト形式
+    code_folding: 'hide'  # Rコードの折りたたみ表示を設定
+    toc: TRUE
+    toc_depth: 3           # 見出しの表示とその深さを指定
+    toc_float: true        # 見出しを横に表示し続ける
+    number_sections: true # 見出しごとに番号を振る
+    df_print: paged        # head()の出力をnotebook的なものに（tibbleと相性良）
+    latex_engine: xelatex  # zxjatypeパッケージを使用するために変更
+    # fig_height: 4.5          # 画像サイズのデフォルトを設定
+    # fig_width: 8           # 画像サイズのデフォルトを設定
+    dev: png
+classoption: xelatex,ja=standard
+editor_options: 
+  chunk_output_type: console
+---
+# Rmd Settings
+```{r setup, include=FALSE}
+Sys.setenv(LANG = "en") #English
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+rm(list = ls())
+
+path <- getwd()
+
+setwd(path)
+
+# packages
+pacman::p_load(tidyverse, plotly,readxl,scales, extrafont,PerformanceAnalytics, GGally, patchwork, ggpubr, DT, estimatr, texreg,　modelsummary)
+
+# Font for windows and mac
+if (stringr::str_detect(path, pattern="D:")){ 
+  
+  theme_set(theme_gray(base_size = 10, base_family = "Arial"))        # For Windows
+
+ } else{
+  
+  theme_set(theme_gray(base_size = 10, base_family = "HiraginoSans-W3"))  # For Mac OS
+
+ }
+```
+
+# Contents
+covid_on_suicideのWeighted regresion版
+
+分析用データの読み込みおよび整理はcovid_on_sucide_dataset.Rmdを参照。
+
+# Read functions/関数の読み込み
+```{r}
+source("functions.R")
+```
+
+
+# Read data/分析用データの読み込み
+```{r}
+df_analysis <- readr::read_csv("output/df_analysis.csv")
+```
+
+# Y=total sucide rate/男女合計の自殺率
+
+## OLS, no trends
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                 treat_var = "job_seeker_total_shock",
+                                 estimation_label = "total_OLS_notrend")
+
+# Event study graph
+graph_total_OLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "total_OLS_notrend")
+
+graph_total_OLS_notrend
+
+estimates_total_OLS_notrend　<- df_estimates #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "total_WLS_notrend")
+
+# Event study graph
+graph_total_WLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "total_WLS_notrend")
+
+graph_total_WLS_notrend
+
+estimates_total_WLS_notrend　<- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "total_OLS_trend")
+
+# Event study graph
+graph_total_OLS_trend <- event_study_graph(data = df_estimates ,
+                                          graph_title = "total_OLS_trend")
+
+graph_total_OLS_trend
+
+estimates_total_OLS_trend　<- df_estimates #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "total_WLS_trend")
+
+# Event study graph
+graph_total_WLS_trend <- event_study_graph(data = df_estimates ,
+                                          graph_title = "total_WLS_trend")
+
+ggplotly(graph_total_WLS_trend)
+
+estimates_total_WLS_trend <- df_estimates #for robustness check
+
+results_total_WLS_trend <- estimation_results # for only-post DID table
+```
+
+## WLS, with trends, post-covid-month dummies
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_onlypost_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "total_WLS_trend")
+
+# Event study graph
+graph_total_WLS_trend_onlypost <- event_study_graph(data = df_estimates ,
+                                          graph_title = "total_WLS_trend")
+
+ggplotly(graph_total_WLS_trend_onlypost)
+
+estimates_total_WLS_trend_onlypost <- df_estimates #for robustness check
+
+results_total_WLS_trend_onlypost <- estimation_results # for only-post DID table
+```
+
+# Y=total sucide rate/男女合計の自殺率 with covar
+
+## OLS, no trends
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                 treat_var = "job_seeker_total_shock",
+                                 estimation_label = "total_OLS_notrend")
+# Event study graph
+graph_total_OLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "total_OLS_notrend")
+
+graph_total_OLS_notrend_covar
+
+estimates_total_OLS_notrend_covar <- df_estimates #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "total_WLS_notrend")
+
+# Event study graph
+graph_total_WLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "total_WLS_notrend")
+
+graph_total_WLS_notrend_covar
+
+estimates_total_WLS_notrend_covar　<- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "total_OLS_trend")
+
+# Event study graph
+graph_total_OLS_trend_covar <- event_study_graph(data = df_estimates ,
+                                          graph_title = "total_OLS_trend")
+
+graph_total_OLS_trend_covar
+
+estimates_total_OLS_trend_covar　<- df_estimates #for robustness check
+
+
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "total_WLS_trend")
+# Event study graph
+graph_total_WLS_trend_covar <- event_study_graph(data = df_estimates ,
+                                          graph_title = "total_WLS_trend")
+
+ggplotly(graph_total_WLS_trend_covar)
+
+estimates_total_WLS_trend_covar <- df_estimates #for robustness check
+
+results_total_WLS_trend_covar <- estimation_results # for only-post DID table
+
+```
+
+## WLS, with trends, post-covid-month dummies
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_onlypost_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "total_WLS_trend")
+# Event study graph
+graph_total_WLS_trend_covar_onlypost <- event_study_graph(data = df_estimates,
+                                          graph_title = "total_WLS_trend")
+
+ggplotly(graph_total_WLS_trend_covar_onlypost)
+
+estimates_total_WLS_trend_covar_onlypost <- df_estimates #for robustness check
+
+results_total_WLS_trend_covar_onlypost <- estimation_results # for only-post DID table
+```
+
+
+# Y=total sucide rate(YOY)/男女合計の自殺率(前年同月差）
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_total_OLS_notrend")
+
+# Event study graph
+graph_yoy_total_OLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_total_OLS_notrend")
+
+graph_yoy_total_OLS_notrend
+
+
+estimates_yoy_total_OLS_notrend　<- df_estimates #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_total_WLS_notrend")
+
+# Event study graph
+graph_yoy_total_WLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_total_WLS_notrend")
+
+graph_yoy_total_WLS_notrend
+
+estimates_yoy_total_WLS_notrend　<- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_total_OLS_trend")
+
+# Event study graph
+graph_yoy_total_OLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_total_OLS_trend")
+
+graph_yoy_total_OLS_trend
+
+estimates_yoy_total_OLS_trend　<- df_estimates #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_total_WLS_trend")
+
+# Event study graph
+graph_yoy_total_WLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_total_WLS_trend")
+
+ggplotly(graph_yoy_total_WLS_trend)
+
+estimates_yoy_total_WLS_trend　<- df_estimates #for robustness check
+```
+
+
+# Y=total sucide rate(YOY)/男女合計の自殺率(前年同月差）with covar
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_total_OLS_notrend")
+
+# Event study graph
+graph_yoy_total_OLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_total_OLS_notrend")
+
+graph_yoy_total_OLS_notrend_covar
+
+estimates_yoy_total_OLS_notrend_covar　<- df_estimates #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_total_WLS_notrend")
+
+# Event study graph
+graph_yoy_total_WLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_total_WLS_notrend")
+
+graph_yoy_total_WLS_notrend_covar
+
+estimates_yoy_total_WLS_notrend_covar <- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_total_OLS_trend")
+
+# Event study graph
+graph_yoy_total_OLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_total_OLS_trend")
+
+graph_yoy_total_OLS_trend_covar
+
+estimates_yoy_total_OLS_trend_covar <- df_estimates #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_total_WLS_trend")
+
+# Event study graph
+graph_yoy_total_WLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_total_WLS_trend")
+
+ggplotly(graph_yoy_total_WLS_trend_covar)
+
+estimates_yoy_total_WLS_trend_covar <- df_estimates #for robustness check
+```
+
+
+# Y=female suicide rate/女性の自殺率
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                 treat_var = "job_seeker_total_shock",
+                                 estimation_label = "female_OLS_notrend")
+
+# Event study graph
+graph_female_OLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "female_OLS_notrend")
+
+graph_female_OLS_notrend
+
+estimates_female_OLS_notrend <- df_estimates #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "female_WLS_notrend")
+
+# Event study graph
+graph_female_WLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "female_WLS_notrend")
+
+graph_female_WLS_notrend
+
+estimates_female_WLS_notrend <- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "female_OLS_trend")
+
+# Event study graph
+graph_female_OLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "female_OLS_trend")
+
+graph_female_OLS_trend
+
+estimates_female_OLS_trend <- df_estimates #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "female_WLS_trend")
+
+# Event study graph
+graph_female_WLS_trend <- event_study_graph(data = df_estimates ,
+                                          graph_title = "female_WLS_trend")
+
+ggplotly(graph_female_WLS_trend)
+
+estimates_female_WLS_trend <- df_estimates #for robustness check
+
+results_female_WLS_trend <- estimation_results # for only-post DID table
+
+```
+
+## WLS, with trends, post-covid-month dummies
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_onlypost_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "female_WLS_trend")
+
+# Event study graph
+graph_female_WLS_trend_onlypost <- event_study_graph(data = df_estimates ,
+                                          graph_title = "female_WLS_trend")
+
+ggplotly(graph_female_WLS_trend_onlypost)
+
+estimates_female_WLS_trend_onlypost <- df_estimates #for robustness check
+
+results_female_WLS_trend_onlypost <- estimation_results # for only-post DID table
+
+```
+
+# Y=female suicide rate/女性の自殺率 with covar
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                 treat_var = "job_seeker_total_shock",
+                                 estimation_label = "female_OLS_notrend")
+
+# Event study graph
+graph_female_OLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "female_OLS_notrend")
+
+graph_female_OLS_notrend_covar
+
+estimates_female_OLS_notrend_covar <- df_estimates #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "female_WLS_notrend")
+
+# Event study graph
+graph_female_WLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "female_WLS_notrend")
+
+graph_female_WLS_notrend_covar
+
+estimates_female_WLS_notrend_covar <- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "female_OLS_trend")
+
+# Event study graph
+graph_female_OLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "female_OLS_trend")
+
+graph_female_OLS_trend_covar
+
+estimates_female_OLS_trend_covar <- df_estimates #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "female_WLS_trend")
+
+# Event study graph
+graph_female_WLS_trend_covar <- event_study_graph(data = df_estimates ,
+                                          graph_title = "female_WLS_trend")
+
+ggplotly(graph_female_WLS_trend_covar)
+
+estimates_female_WLS_trend_covar <- df_estimates #for robustness check
+
+results_female_WLS_trend_covar <- estimation_results # for only-post DID table
+
+```
+
+## WLS, with trends, post-covid-month dummies
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_onlypost_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "female_WLS_trend")
+
+# Event study graph
+graph_female_WLS_trend_covar_onlypost <- event_study_graph(data = df_estimates ,
+                                          graph_title = "female_WLS_trend")
+
+ggplotly(graph_female_WLS_trend_covar_onlypost)
+
+estimates_female_WLS_trend_covar_onlypost <- df_estimates #for robustness check
+
+results_female_WLS_trend_covar_onlypost <- estimation_results # for only-post DID table
+
+```
+
+# Y=female suicide rate(YOY)/女性の自殺率(前年同月差）
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_female_OLS_notrend")
+
+# Event study graph
+graph_yoy_female_OLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_female_OLS_notrend")
+
+graph_yoy_female_OLS_notrend
+
+estimates_yoy_female_OLS_notrend <- df_estimates #for robustness check
+
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_female_WLS_notrend")
+
+# Event study graph
+graph_yoy_female_WLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_female_WLS_notrend")
+
+graph_yoy_female_WLS_notrend
+
+estimates_yoy_female_WLS_notrend <- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_female_OLS_trend")
+
+# Event study graph
+graph_yoy_female_OLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_female_OLS_trend")
+
+graph_yoy_female_OLS_trend
+
+estimates_yoy_female_OLS_trend <- df_estimates #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_female_WLS_trend")
+
+# Event study graph
+graph_yoy_female_WLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_female_WLS_trend")
+
+ggplotly(graph_yoy_female_WLS_trend)
+
+estimates_yoy_female_WLS_trend <- df_estimates #for robustness check
+```
+
+
+
+# Y=female suicide rate(YOY)/女性の自殺率(前年同月差）with covar
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_female_OLS_notrend")
+
+# Event study graph
+graph_yoy_female_OLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_female_OLS_notrend")
+
+graph_yoy_female_OLS_notrend_covar
+
+estimates_yoy_female_OLS_notrend_covar <- df_estimates #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_female_WLS_notrend")
+
+# Event study graph
+graph_yoy_female_WLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_female_WLS_notrend")
+
+graph_yoy_female_WLS_notrend_covar
+
+estimates_yoy_female_WLS_notrend_covar <- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_female_OLS_trend")
+
+# Event study graph
+graph_yoy_female_OLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_female_OLS_trend")
+
+graph_yoy_female_OLS_trend_covar
+
+estimates_yoy_female_OLS_trend_covar <- df_estimates #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_female, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_female_WLS_trend")
+
+# Event study graph
+graph_yoy_female_WLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_female_WLS_trend")
+
+ggplotly(graph_yoy_female_WLS_trend_covar)
+
+estimates_yoy_female_WLS_trend_covar <- df_estimates #for robustness check
+```
+
+
+
+# Y=male suicide rate/男性の自殺率
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                 treat_var = "job_seeker_total_shock",
+                                 estimation_label = "male_OLS_notrend")
+
+# Event study graph
+graph_male_OLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "male_OLS_notrend")
+
+graph_male_OLS_notrend
+
+estimates_male_OLS_notrend <- df_estimates #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "male_WLS_notrend")
+
+# Event study graph
+graph_male_WLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "male_WLS_notrend")
+
+graph_male_WLS_notrend
+
+estimates_male_WLS_notrend <- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "male_OLS_trend")
+
+# Event study graph
+graph_male_OLS_trend <- event_study_graph(data = df_estimates ,
+                                          graph_title = "male_OLS_trend")
+
+graph_male_OLS_trend
+
+estimates_male_OLS_trend <- df_estimates #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "male_WLS_trend")
+
+# Event study graph
+graph_male_WLS_trend <- event_study_graph(data = df_estimates ,
+                                          graph_title = "male_WLS_trend")
+
+ggplotly(graph_male_WLS_trend)
+
+estimates_male_WLS_trend <- df_estimates #for robustness check
+
+results_male_WLS_trend <- estimation_results # for only-post DID table
+
+```
+
+## WLS, with trends, post-covid-month dummies
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_onlypost_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "male_WLS_trend")
+
+# Event study graph
+graph_male_WLS_trend_onlypost <- event_study_graph(data = df_estimates ,
+                                          graph_title = "male_WLS_trend")
+
+ggplotly(graph_male_WLS_trend_onlypost)
+
+estimates_male_WLS_trend_onlypost <- df_estimates #for robustness check
+
+results_male_WLS_trend_onlypost <- estimation_results # for only-post DID table
+
+```
+
+
+# Y=male suicide rate/男性の自殺率 with covar
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                 treat_var = "job_seeker_total_shock",
+                                 estimation_label = "male_OLS_notrend")
+
+# Event study graph
+graph_male_OLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "male_OLS_notrend")
+
+graph_male_OLS_notrend_covar
+
+estimates_male_OLS_notrend_covar <- df_estimates #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "male_WLS_notrend")
+
+# Event study graph
+graph_male_WLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "male_WLS_notrend")
+
+graph_male_WLS_notrend_covar
+
+estimates_male_WLS_notrend_covar <- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "male_OLS_trend")
+
+# Event study graph
+graph_male_OLS_trend_covar <- event_study_graph(data = df_estimates ,
+                                          graph_title = "male_OLS_trend")
+
+graph_male_OLS_trend_covar
+
+estimates_male_OLS_trend_covar <- df_estimates #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "male_WLS_trend")
+
+# Event study graph
+graph_male_WLS_trend_covar <- event_study_graph(data = df_estimates ,
+                                          graph_title = "male_WLS_trend")
+
+ggplotly(graph_male_WLS_trend_covar)
+
+estimates_male_WLS_trend_covar <- df_estimates #for robustness check
+
+results_male_WLS_trend_covar <- estimation_results # for only-post DID table
+
+```
+
+## WLS, with trends, post-covid-month dummies
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_onlypost_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "male_WLS_trend")
+
+# Event study graph
+graph_male_WLS_trend_covar_onlypost <- event_study_graph(data = df_estimates ,
+                                          graph_title = "male_WLS_trend")
+
+ggplotly(graph_male_WLS_trend_covar_onlypost)
+
+estimates_male_WLS_trend_covar_onlypost <- df_estimates #for robustness check
+
+results_male_WLS_trend_covar_onlypost <- estimation_results # for only-post DID table
+
+```
+
+
+# Y=male suicide rate(YOY)/男性の自殺率(前年同月差）
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_male_OLS_notrend")
+
+# Event study graph
+graph_yoy_male_OLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_male_OLS_notrend")
+
+graph_yoy_male_OLS_notrend
+
+estimates_yoy_male_OLS_notrend <- df_estimates #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_male_WLS_notrend")
+
+# Event study graph
+graph_yoy_male_WLS_notrend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_male_WLS_notrend")
+
+graph_yoy_male_WLS_notrend
+
+estimates_yoy_male_WLS_notrend  <- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_male_OLS_trend")
+
+# Event study graph
+graph_yoy_male_OLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_male_OLS_trend")
+
+graph_yoy_male_OLS_trend
+
+estimates_yoy_male_OLS_trend  <- df_estimates #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_male_WLS_trend")
+
+# Event study graph
+graph_yoy_male_WLS_trend <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_male_WLS_trend")
+
+ggplotly(graph_yoy_male_WLS_trend)
+
+estimates_yoy_male_WLS_trend  <- df_estimates #for robustness check
+```
+
+
+# Y=male suicide rate(YOY)/男性の自殺率率(前年同月差）with covar
+
+## OLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_male_OLS_notrend")
+
+# Event study graph
+graph_yoy_male_OLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_male_OLS_notrend")
+
+graph_yoy_male_OLS_notrend_covar
+
+estimates_yoy_male_OLS_notrend_covar  <- df_estimates #for robustness check
+```
+
+## WLS, no trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_notrend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_male_WLS_notrend")
+
+# Event study graph
+graph_yoy_male_WLS_notrend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_male_WLS_notrend")
+
+graph_yoy_male_WLS_notrend_covar
+
+estimates_yoy_male_WLS_notrend_covar  <- df_estimates #for robustness check
+```
+
+## OLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_OLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_male_OLS_trend")
+
+# Event study graph
+graph_yoy_male_OLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_male_OLS_trend")
+
+graph_yoy_male_OLS_trend_covar
+
+estimates_yoy_male_OLS_trend_covar  <- df_estimates #for robustness check
+```
+
+## WLS, with trends
+
+```{r}
+# DID estimation
+estimation_results <- dynamic_DID_WLS_trend_covar8Xcovid_months(dataset = df_analysis, 
+                    outcome_var = df_analysis$yoy_suicide_rate_male, 
+                    treat_var = df_analysis$job_seeker_total_shock)
+
+#texreg::screenreg(l = estimation_results , include.ci = FALSE, digits=3,)
+
+# DID estimates and 90% CI
+df_estimates <- DID_coefficients_main(DID_results = estimation_results, 
+                                         treat_var = "job_seeker_total_shock",
+                                 estimation_label = "yoy_male_WLS_trend")
+
+# Event study graph
+graph_yoy_male_WLS_trend_covar <- event_study_graph(data = df_estimates,
+                                          graph_title = "yoy_male_WLS_trend")
+
+ggplotly(graph_yoy_male_WLS_trend_covar)
+
+estimates_yoy_male_WLS_trend_covar  <- df_estimates #for robustness check
+```
+
+## GGplotly
+```{r}
+ggplotly(graph_total_WLS_trend)
+ggplotly(graph_total_WLS_trend_covar)
+ggplotly(graph_female_WLS_trend)
+ggplotly(graph_female_WLS_trend_covar)
+ggplotly(graph_male_WLS_trend)
+ggplotly(graph_male_WLS_trend_covar)
+
+```
+
+# Merge outcome results/アウトカム結果の結合
+## Y=total suicide rate/男女合計の自殺率
+```{r}
+#merge and label estimates data
+estimates_total_bind <- dplyr::bind_rows(estimates_total_OLS_notrend, 
+                                           estimates_total_WLS_notrend, 
+                                           estimates_total_OLS_trend,
+                                           estimates_total_WLS_trend)
+
+#change labels and reorder labels
+estimates_total_bind <- estimates_labeling_main(estimates_total_bind)
+
+# Display results
+DT::datatable(estimates_total_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_total_bind <- event_study_graph_bind_main(data = estimates_total_bind, 
+                                             graph_title = "(a) Total suicide rate")
+
+ggplotly(graph_total_bind)
+#ggplotly(graph_total_bind)
+```
+
+## Y=total suicide rate/男女合計の自殺率 with covar
+```{r}
+#merge and label estimates data
+estimates_total_bind <- dplyr::bind_rows(estimates_total_OLS_notrend_covar, 
+                                           estimates_total_WLS_notrend_covar, 
+                                           estimates_total_OLS_trend_covar,
+                                           estimates_total_WLS_trend_covar)
+
+#change labels and reorder labels
+estimates_total_bind <- estimates_labeling_main(estimates_total_bind)
+
+# Display results
+DT::datatable(estimates_total_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_total_bind_covar <- event_study_graph_bind_main(data = estimates_total_bind, 
+                                             graph_title = "(a) Total suicide rate")
+
+ggplotly(graph_total_bind_covar)
+```
+
+## Y=total suicide rate(YOY)/男女合計の自殺率(対前年同期差)
+```{r}
+#merge and label estimates data
+estimates_yoy_total_bind <- dplyr::bind_rows(estimates_yoy_total_OLS_notrend, 
+                                           estimates_yoy_total_WLS_notrend, 
+                                           estimates_yoy_total_OLS_trend,
+                                           estimates_yoy_total_WLS_trend)
+
+#change labels and reorder labels
+estimates_yoy_total_bind <- estimates_labeling_main(estimates_yoy_total_bind)
+
+# display results
+DT::datatable(estimates_yoy_total_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_yoy_total_bind <- event_study_graph_bind_main(data = estimates_yoy_total_bind, 
+                                             graph_title = "(b) Total suicide rate (year-on-year)")
+
+ggplotly(graph_yoy_total_bind)
+```
+
+## Y=total suicide rate(YOY)/男女合計の自殺率(対前年同期差) with covar
+```{r}
+#merge and label estimates data
+estimates_yoy_total_bind <- dplyr::bind_rows(estimates_yoy_total_OLS_notrend_covar, 
+                                           estimates_yoy_total_WLS_notrend_covar, 
+                                           estimates_yoy_total_OLS_trend_covar,
+                                           estimates_yoy_total_WLS_trend_covar)
+
+#change labels and reorder labels
+estimates_yoy_total_bind <- estimates_labeling_main(estimates_yoy_total_bind)
+
+# display results
+DT::datatable(estimates_yoy_total_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_yoy_total_bind_covar <- event_study_graph_bind_main(data = estimates_yoy_total_bind, 
+                                             graph_title = "(b) Total suicide rate (year-on-year)")
+
+ggplotly(graph_yoy_total_bind_covar)
+
+```
+
+## Y=female suicide rate/女性の自殺率
+
+```{r}
+#merge and label estimates data
+estimates_female_bind <- dplyr::bind_rows(estimates_female_OLS_notrend, 
+                                           estimates_female_WLS_notrend, 
+                                           estimates_female_OLS_trend,
+                                           estimates_female_WLS_trend)
+
+#change labels and reorder labels
+estimates_female_bind <- estimates_labeling_main(estimates_female_bind)
+
+# display results
+DT::datatable(estimates_female_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_female_bind <- event_study_graph_bind_main(data = estimates_female_bind, 
+                                             graph_title = "(c) Female suicide rate")
+
+ggplotly(graph_female_bind)
+
+```
+
+## Y=female suicide rate/女性の自殺率 with covar
+```{r}
+#merge and label estimates data
+estimates_female_bind <- dplyr::bind_rows(estimates_female_OLS_notrend_covar, 
+                                           estimates_female_WLS_notrend_covar, 
+                                           estimates_female_OLS_trend_covar,
+                                           estimates_female_WLS_trend_covar)
+
+#change labels and reorder labels
+estimates_female_bind <- estimates_labeling_main(estimates_female_bind)
+
+# display results
+DT::datatable(estimates_female_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_female_bind_covar <- event_study_graph_bind_main(data = estimates_female_bind, 
+                                             graph_title = "(c) Female suicide rate")
+
+ggplotly(graph_female_bind_covar)
+
+```
+
+
+## Y=female suicide rate(YOY)/女性の自殺率(対前年同期差)
+
+```{r}
+#merge and label estimates data
+estimates_yoy_female_bind <- dplyr::bind_rows(estimates_yoy_female_OLS_notrend, 
+                                           estimates_yoy_female_WLS_notrend, 
+                                           estimates_yoy_female_OLS_trend,
+                                           estimates_yoy_female_WLS_trend)
+
+#change labels and reorder labels
+estimates_yoy_female_bind <- estimates_labeling_main(estimates_yoy_female_bind)
+
+
+# display results
+DT::datatable(estimates_yoy_female_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_yoy_female_bind <- event_study_graph_bind_main(data = estimates_yoy_female_bind, 
+                                             graph_title = "(d) Female suicide rate (year-on-year)")
+
+ggplotly(graph_yoy_female_bind)
+
+```
+
+## Y=female suicide rate(YOY)/女性の自殺率(対前年同期差) with covar
+
+```{r}
+#merge and label estimates data
+estimates_yoy_female_bind <- dplyr::bind_rows(estimates_yoy_female_OLS_notrend_covar, 
+                                           estimates_yoy_female_WLS_notrend_covar, 
+                                           estimates_yoy_female_OLS_trend_covar,
+                                           estimates_yoy_female_WLS_trend_covar)
+
+#change labels and reorder labels
+estimates_yoy_female_bind <- estimates_labeling_main(estimates_yoy_female_bind)
+
+
+# display results
+DT::datatable(estimates_yoy_female_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_yoy_female_bind_covar <- event_study_graph_bind_main(data = estimates_yoy_female_bind, 
+                                             graph_title = "(d) Female suicide rate (year-on-year)")
+
+ggplotly(graph_yoy_female_bind_covar)
+
+```
+
+## Y=male suicide rate/男性の自殺率
+
+```{r}
+#merge and label estimates data
+estimates_male_bind <- dplyr::bind_rows(estimates_male_OLS_notrend, 
+                                           estimates_male_WLS_notrend, 
+                                           estimates_male_OLS_trend,
+                                           estimates_male_WLS_trend)
+
+#change labels and reorder labels
+estimates_male_bind <- estimates_labeling_main(estimates_male_bind)
+
+
+# display results
+DT::datatable(estimates_male_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_male_bind <- event_study_graph_bind_main(data = estimates_male_bind, 
+                                             graph_title = "(e) Male Suicide rate")
+
+ggplotly(graph_male_bind)
+
+```
+
+## Y=male suicide rate/男性の自殺率 with covar
+
+```{r}
+#merge and label estimates data
+estimates_male_bind <- dplyr::bind_rows(estimates_male_OLS_notrend_covar, 
+                                           estimates_male_WLS_notrend_covar, 
+                                           estimates_male_OLS_trend_covar,
+                                           estimates_male_WLS_trend_covar)
+
+#change labels and reorder labels
+estimates_male_bind <- estimates_labeling_main(estimates_male_bind)
+
+
+# display results
+DT::datatable(estimates_male_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_male_bind_covar <- event_study_graph_bind_main(data = estimates_male_bind, 
+                                             graph_title = "(e) Male Suicide rate")
+
+ggplotly(graph_male_bind_covar)
+
+```
+
+
+## Y=male suicide rate(YOY)/男性の自殺率(対前年同期差)
+
+```{r}
+#merge and label estimates data
+estimates_yoy_male_bind <- dplyr::bind_rows(estimates_yoy_male_OLS_notrend, 
+                                           estimates_yoy_male_WLS_notrend, 
+                                           estimates_yoy_male_OLS_trend,
+                                           estimates_yoy_male_WLS_trend)
+
+#change labels and reorder labels
+estimates_yoy_male_bind <- estimates_labeling_main(estimates_yoy_male_bind)
+
+
+# display results
+DT::datatable(estimates_yoy_male_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_yoy_male_bind <- event_study_graph_bind_main(data = estimates_yoy_male_bind, 
+                                             graph_title = "(f) Male Suicide rate (year-on-year)")
+
+ggplotly(graph_yoy_male_bind)
+
+```
+
+## Y=male suicide rate(YOY)/男性の自殺率(対前年同期差) with covar
+
+```{r}
+#merge and label estimates data
+estimates_yoy_male_bind <- dplyr::bind_rows(estimates_yoy_male_OLS_notrend_covar, 
+                                           estimates_yoy_male_WLS_notrend_covar, 
+                                           estimates_yoy_male_OLS_trend_covar,
+                                           estimates_yoy_male_WLS_trend_covar)
+
+#change labels and reorder labels
+estimates_yoy_male_bind <- estimates_labeling_main(estimates_yoy_male_bind)
+
+
+# display results
+DT::datatable(estimates_yoy_male_bind) %>%
+   DT::formatRound(columns = c("estimate", "ci_lower", "ci_upper"), digits=3)
+
+#graph
+graph_yoy_male_bind_covar <- event_study_graph_bind_main(data = estimates_yoy_male_bind, 
+                                             graph_title = "(f) Male Suicide rate (year-on-year)")
+
+ggplotly(graph_yoy_male_bind_covar)
+
+```
+
+# Merge graphs/グラフ統合
+
+# Extract legend/legend取り出し
+```{r}
+#Legendの表示
+graph_for_legend  <-　graph_total_bind +
+ theme(legend.position = 'bottom', # Adjust x axis label
+       legend.title = element_text(colour = "black", size = 20),
+       legend.text = element_text(color = "black", size = 20))
+graph_for_legend  
+
+#extract legend
+legend_model_types <- ggpubr::get_legend(graph_for_legend)
+legend_model_types <- ggpubr::as_ggplot(legend_model_types)
+legend_model_types
+
+
+#２行Legendの表示
+graph_for_legend_2row  <-　graph_total_bind +
+ theme(legend.position = 'bottom', # Adjust x axis label
+       legend.title = element_text(colour = "black", size = 20),
+       legend.text = element_text(color = "black", size = 20))+
+  guides(color = guide_legend(nrow = 2, byrow = TRUE)) #legendを二行に変更　2021Sep7 Waki 
+graph_for_legend_2row  
+
+#extract legend
+legend_2row_model_types <- ggpubr::get_legend(graph_for_legend_2row)
+legend_2row_model_types <- ggpubr::as_ggplot(legend_2row_model_types)
+legend_2row_model_types
+
+
+```
+
+## Merge/統合
+
+グラフを統合して論文用に保存。
+
+
+### graph settings
+
+```{r}
+dpi_num <- 100
+width_num <- 15
+height_num <- 20
+
+ymin <- - 7
+ymax <- 5
+
+ymin_num <- - 5
+ymax_num  <- 5 
+interval <- 2.5
+```
+
+### WLS with linear trends
+```{r, fig.width = 10, fig.height = 15}
+graph_total_WLS_trend <- graph_total_WLS_trend + 
+  labs(title = "(a) Total") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_total_WLS_trend_covar <- graph_total_WLS_trend_covar + 
+  labs(title = "(b) Total, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_female_WLS_trend <- graph_female_WLS_trend + 
+  labs(title = "(c) Female")+ 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_female_WLS_trend_covar <- graph_female_WLS_trend_covar + 
+  labs(title = "(d) Female, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_male_WLS_trend <- graph_male_WLS_trend + 
+  labs(title = "(e) Male")+ 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_male_WLS_trend_covar <- graph_male_WLS_trend_covar + 
+  labs(title = "(f) Male, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph <- (graph_total_WLS_trend | graph_total_WLS_trend_covar) / 
+  (graph_female_WLS_trend | graph_female_WLS_trend_covar) / 
+  (graph_male_WLS_trend | graph_male_WLS_trend_covar)　/
+  legend_model_types +
+  plot_layout(heights = c(2, 2, 2, 0.5))
+
+
+graph
+
+#保存
+ggsave(file = "output/graph_job_seeker_total_shock_on_suicide_WLStrends.pdf", plot = graph, 
+       dpi = dpi_num, width = width_num, height = height_num)     
+```
+
+### WLS with linear trends (YOY)
+```{r, fig.width = 10, fig.height = 15}
+graph_yoy_total_WLS_trend <- graph_yoy_total_WLS_trend + 
+  labs(title = "(a) Total") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_total_WLS_trend_covar <- graph_yoy_total_WLS_trend_covar + 
+  labs(title = "(b) Total, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_female_WLS_trend <- graph_yoy_female_WLS_trend + 
+  labs(title = "(c) Female")+ 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_female_WLS_trend_covar <- graph_yoy_female_WLS_trend_covar + 
+  labs(title = "(d) Female, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_male_WLS_trend <- graph_yoy_male_WLS_trend + 
+  labs(title = "(e) Male ")+ 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_male_WLS_trend_covar <- graph_yoy_male_WLS_trend_covar + 
+  labs(title = "(f) Male, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph <- (graph_yoy_total_WLS_trend | graph_yoy_total_WLS_trend_covar) / 
+  (graph_yoy_female_WLS_trend | graph_yoy_female_WLS_trend_covar) / 
+  (graph_yoy_male_WLS_trend | graph_yoy_male_WLS_trend_covar) /
+  legend_model_types +
+  plot_layout(heights = c(2, 2, 2, 0.5))
+graph
+
+#保存
+ggsave(file = "output/graph_job_seeker_total_shock_diff2_on_yoy_suicide_WLStrends.pdf", plot = graph, 
+       dpi = dpi_num, width = width_num, height = height_num)     
+```
+
+
+### Robustness check
+```{r, fig.width = 10, fig.height = 15}
+graph_total_bind <- graph_total_bind + 
+  labs(title = "(a) Total") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_total_bind_covar <- graph_total_bind_covar + 
+  labs(title = "(b) Total, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+
+graph_female_bind <- graph_female_bind + 
+  labs(title = "(c) Female")+ 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_female_bind_covar <- graph_female_bind_covar + 
+  labs(title = "(d) Female, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_male_bind <- graph_male_bind + 
+  labs(title = "(e) Male")+ 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_male_bind_covar <- graph_male_bind_covar + 
+  labs(title = "(f) Male, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph <- (graph_total_bind | graph_total_bind_covar) / 
+  (graph_female_bind| graph_female_bind_covar) / 
+  (graph_male_bind| graph_male_bind_covar) /
+  legend_model_types +
+  plot_layout(heights = c(2, 2, 2, 0.5))
+
+graph
+
+#保存
+
+ggsave(file = "output/graph_job_seeker_total_shock_on_suicide_robust.pdf", plot = graph, 
+       dpi = dpi_num, width = width_num, height = height_num)     
+```
+
+### Robustness check (YOY) 
+```{r, fig.width = 10, fig.height = 15}
+graph_yoy_total_bind <- graph_yoy_total_bind + 
+  labs(title = "(a) Total") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_total_bind_covar <- graph_yoy_total_bind_covar + 
+  labs(title = "(b) Total, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_female_bind <- graph_yoy_female_bind + 
+  labs(title = "(c) Female")+ 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_female_bind_covar <- graph_yoy_female_bind_covar + 
+  labs(title = "(d) Female, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_male_bind <- graph_yoy_male_bind + 
+  labs(title = "(e) Male")+ 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph_yoy_male_bind_covar <- graph_yoy_male_bind_covar + 
+  labs(title = "(f) Male, with covaraites") + 
+    scale_y_continuous(limit = c(ymin, ymax), breaks=seq(ymin_num, ymax_num, interval))
+
+graph <- (graph_yoy_total_bind | graph_yoy_total_bind_covar) / 
+  (graph_yoy_female_bind| graph_yoy_female_bind_covar) / 
+  (graph_yoy_male_bind| graph_yoy_male_bind_covar) /
+  legend_model_types +
+  plot_layout(heights = c(2, 2, 2, 0.5))
+
+graph
+
+#保存
+
+ggsave(file = "output/graph_job_seeker_total_shock_on_yoy_suicide_robust.pdf", plot = graph, 
+       dpi = dpi_num, width = width_num, height = height_num)     
+```
+
+
+# Regression table/回帰結果表 without covar
+
+```{r, eval=FALSE}
+options("modelsummary_format_numeric_latex" = "plain")
+
+# 列の選択 column order
+
+# 男女合計、女性、男性、YOYのみ, monthlyhのみ
+
+rows_MONTH <- tribble(~name, ~"(1)", ~"(2)", ~"(3)", ~"(4)", ~"(5)", ~"(6)", 
+"Ref. month", "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}",  "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}","\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}")
+
+## results list
+table_results_MONTH <- list()
+table_results_MONTH[["(1)"]] <- results_total_WLS_trend
+table_results_MONTH[["(2)"]] <- results_total_WLS_trend_onlypost
+table_results_MONTH[["(3)"]] <- results_female_WLS_trend
+table_results_MONTH[["(4)"]] <- results_female_WLS_trend_onlypost
+table_results_MONTH[["(5)"]] <- results_male_WLS_trend
+table_results_MONTH[["(6)"]] <- results_male_WLS_trend_onlypost
+
+## HTML table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      title_words = "Suicide",
+                      gof = gm,
+                      output_style = "html") %>%
+    kableExtra::add_header_above(c(" " = 1, "Total" = 2, "Female" = 2, "Male" = 2))
+
+## Latex table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      gof = gm,
+                      title_words = "DID estimates for suicide rates\\label{tab:DID_unemploy_on_suicide}", 
+                      output_style = "latex") %>% 
+  kableExtra::add_header_above(c(" " = 1, "Total" = 2, "Female" = 2, "Male" = 2)) %>%
+  kableExtra::add_footnote(c("Notes: Robust standard errors are clustered at the prefecture level and the number of clusters (i.e. prefectures) is 47. The treatment variable is the COVID-19-induced employment shock, which is calculated as equation \\eqref{eq:employment_shock}. Estimates are obtained based on equation \\eqref{eq:did_model_ver2} with WLS estimation weighted by prefecture population size."),threeparttable = TRUE, notation = "none",escape = FALSE) %>% 
+  kableExtra::column_spec(2:7, width = "1.5cm") %>% 
+  kableExtra::save_kable("output/job_seeker_total_shock_on_suicide_robust_tables.tex")
+```
+
+# Regression table/回帰結果表 with covar
+
+```{r, eval=FALSE}
+# 列の選択 column order
+
+# 男女合計、女性、男性、YOYのみ, monthlyhのみ
+
+rows_MONTH <- tribble(~name, ~"(1)", ~"(2)", ~"(3)", ~"(4)", ~"(5)", ~"(6)", 
+"Ref. month", "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}",  "\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}","\\footnotesize{Jan.2020}", "\\footnotesize{$\\leq$Jan.2020}")
+
+## results list
+table_results_MONTH <- list()
+table_results_MONTH[["(1)"]] <- results_total_WLS_trend_covar
+table_results_MONTH[["(2)"]] <- results_total_WLS_trend_covar_onlypost
+table_results_MONTH[["(3)"]] <- results_female_WLS_trend_covar
+table_results_MONTH[["(4)"]] <- results_female_WLS_trend_covar_onlypost
+table_results_MONTH[["(5)"]] <- results_male_WLS_trend_covar
+table_results_MONTH[["(6)"]] <- results_male_WLS_trend_covar_onlypost
+
+## HTML table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      title_words = "Suicide",
+                      gof = gm,
+                      output_style = "html") %>%
+    kableExtra::add_header_above(c(" " = 1, "Total" = 2, "Female" = 2, "Male" = 2))
+
+## Latex table
+estimates_table_MONTH(df = table_results_MONTH,
+                      rows = rows_MONTH,
+                      gof = gm,
+                      title_words = "DID estimates for suicide rates, with covariates\\label{tab:DID_unemploy_on_suicide_covar}", 
+                      output_style = "latex") %>% 
+  kableExtra::add_header_above(c(" " = 1, "Total" = 2, "Female" = 2, "Male" = 2)) %>%
+  kableExtra::add_footnote(c("Notes: Robust standard errors are clustered at the prefecture level and the number of clusters (i.e. prefectures) is 47. The treatment variable is the COVID-19-induced employment shock, which is calculated as equation \\eqref{eq:employment_shock}. Estimates are obtained based on equation \\eqref{eq:did_model_ver2} with WLS estimation weighted by prefecture population size."),threeparttable = TRUE, notation = "none",escape = FALSE) %>% 
+  kableExtra::column_spec(2:7, width = "1.5cm") %>% 
+  kableExtra::save_kable("output/job_seeker_total_shock_on_suicide_robust_covar_tables.tex")
+```
+

@@ -1,0 +1,383 @@
+---
+title: "Descriptive statistics and graphs"
+author: ""
+date: "`r Sys.Date()`"
+output:
+ html_document:
+    css : R_style.css
+    # theme: cosmo
+    highlight: haddock     # R script highlight type
+    code_folding: 'hide'  # R code folding type
+    toc: TRUE
+    toc_depth: 3           # Heading depth 
+    toc_float: true        # Heading float (横見出し)
+    number_sections: true # Heading number
+    df_print: paged        # head() output like notebook (good for tibble)）
+    latex_engine: xelatex  # for zxjatype pacakge
+    # fig_height: 4.5          # image size height default
+    # fig_width: 8           # image size width default
+    dev: png
+classoption: xelatex,ja=standard
+editor_options: 
+  chunk_output_type: console
+  
+---
+
+# Rmd settings
+
+```{r setup}
+Sys.setenv(LANG = "en") #English
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list = ls())
+
+path <- getwd()
+
+setwd(path)
+
+# packages
+pacman::p_load(tidyverse, plotly,readxl,scales, extrafont,PerformanceAnalytics, GGally, patchwork, ggpubr, ggrepel, stargazer, kableExtra,modelsummary)
+
+# Font for windows and mac
+if (stringr::str_detect(path, pattern="Users")){ 
+  
+   theme_set(theme_classic(base_size = 10, base_family = "HiraginoSans-W3"))  # For Mac OS
+
+ } else{
+  
+theme_set(theme_classic(base_size = 10, base_family = "Arial")) # For Windows
+   }    
+```
+
+
+# Contents /全体の流れのメモ
+
+- Descriptive statistics / 記述統計
+- Correlation between two treatment variables / 処置変数間の相関
+- Correlation between the main treatment varialbe and suicod outcomes / 処置変数と自殺アウトカムの相関
+
+# Read data/分析用データの読み込み
+
+```{r}
+df_analysis <- readr::read_csv("output/df_analysis.csv")
+```
+
+# Descriptive statistics/記述統計表
+
+## Construct a dataset for descriptive stat table in the paper/論文用の記述統計のセットを抽出
+
+```{r}
+df_analysis_desc_stat <- df_analysis %>%
+  select(date, prefec_kanji, # date and prefecture
+         unemploy_shock_diff2,  # main treatment
+         job_seeker_total_shock, # alternative treatment
+         
+         suicide_rate,  # suicide
+         suicide_rate_female,
+         suicide_rate_male, 
+         
+         unemp_benefit_number_total, # unemployment benefit  
+         unemp_benefit_number_female,
+         unemp_benefit_number_male,　
+         
+         yoy_unemp_benefit_number_total,  # unemployment benefit(YOY) 2021Nov11 added
+         yoy_unemp_benefit_number_female, #2021Nov11 added
+         yoy_unemp_benefit_number_male,   #2021Nov11 added
+         
+         koguchi_number, # Emergency small-amount fund / 緊急小口資金
+         sogo_number, # General support fund / 総合支援資金
+         jukyo_number, # Housing Security Benefits /　住居確保給付金
+         
+         persons_receive, # Public Assistance recipients / 生活保護受給者数
+         households_receive, # Public Assistance recipient households / 生活保護受給世帯数
+         
+         yoy_persons_receive,   #2021Nov11 追加
+         yoy_households_receive, #2021Nov11 追加
+
+         infection_rate_cumulative2020jun, # COVID-19 cumulative infection rate up to June 2020
+         death_rate_cumulative2020jun, # COVID-19 cumulative death rate up to June 2020
+         google_mobility_index_2020may, # Google Mobility index at the end of May 2020
+         Population_per_1_km_2_of_inhabitable_area, # Population density, measured based on inhabitable area
+         Secondary_industry_ratio, # secondary industry ratio
+         Tertiary_industry_ratio, # tertiary (service) industry ratio
+         Ratio_of_aged_population, # ratio of aged (65+) to working age (1? - 64)
+         Total_population) # total population
+```
+
+## Keep one month for cross-sectional variables/クロスセクション変数は1ヶ月分のみ
+
+```{r}
+# 2021Sep30 
+
+# Keep only one month data for cross-sectional treatment and control variables / 処置変数とコントロール変数は１月分だけ残す(目視チェック)
+df_analysis_desc_stat <- df_analysis_desc_stat %>%
+   dplyr::mutate(unemploy_shock_diff2 = case_when(date == "2019-01-01" ~ unemploy_shock_diff2)) %>%
+   dplyr::mutate(job_seeker_total_shock = case_when(date == "2019-01-01" ~ job_seeker_total_shock)) %>%
+   dplyr::mutate(google_mobility_index_2020may = case_when(date == "2019-01-01" ~ google_mobility_index_2020may)) %>%
+   dplyr::mutate(infection_rate_cumulative2020jun = case_when(date == "2019-01-01" ~ infection_rate_cumulative2020jun)) %>%
+   dplyr::mutate(death_rate_cumulative2020jun = case_when(date == "2019-01-01" ~ death_rate_cumulative2020jun)) %>%
+   dplyr::mutate(Population_per_1_km_2_of_inhabitable_area = case_when(date == "2019-01-01" ~ Population_per_1_km_2_of_inhabitable_area)) %>%
+   dplyr::mutate(Secondary_industry_ratio = case_when(date == "2019-01-01" ~ Secondary_industry_ratio)) %>%
+   dplyr::mutate(Tertiary_industry_ratio = case_when(date == "2019-01-01" ~ Tertiary_industry_ratio)) %>%
+   dplyr::mutate(Ratio_of_aged_population = case_when(date == "2019-01-01" ~ Ratio_of_aged_population))  %>%
+   dplyr::mutate(Total_population = case_when(date == "2019-01-01" ~ Total_population))
+
+```
+
+## Show desc stat in html/記述統計のhtml表示
+
+```{r}
+# summary stat: skimr
+#skimr::skim(df_analysis_desc_stat)
+
+# summary stat: text
+# 処置変数とコントロール変数の記述統計量(html表示用)
+
+stargazer::stargazer(data.frame(df_analysis_desc_stat),
+          type = "text",digits = 3,
+          summary.stat = c("n", "mean","sd","median","min", "max"),
+          covariate.labels = c("Employment shock (baseline)",
+                               "Employment shock (full-time)",
+                               "Suicide rate (total)",
+                               "Suicide rate (female)", 
+                               "Suicide rate (male)",
+                               "Unemployment benefit (total)", 
+                               "Unemployment benefit (female)", 
+                               "Unemployment benefit (male)", 
+                               "Unemployment bene. (YOY, total)", 
+                               "Unemployment benefit (YOY, female)", 
+                               "Unemployment benefit (YOY, male)", 
+                               "Emergency S.A. Funds",
+                               "General Support Funds",
+                               "Housing Security Benefit",
+                               "Public assistance (recipients)",
+                               "Public assistance (households)",
+                               "Public assistance (YOY, recipients)",
+                               "Public assistance (YOY, households)",
+                               "Cumulative infection rate",
+                               "Cumulative death rate",
+                               "Google Mobility index",
+                               "Population density",
+                               "Ratio of employees (secondary)",
+                               "Ratio of employees (service)",
+                               "Elderly dependency rate",
+                               "Total population")) 
+
+```
+
+## Save desc stat tex/記述統計のtex出力
+
+```{r summary_stat}
+# 2021Oct7
+# Tretment, Outcome, Covariate
+# modelsummary with kableExtra
+# kableExtra::pack_rows
+# kableExtra::add_footnote cannot be used (unsolved)
+
+table_desc_stat <-  modelsummary::datasummary(
+                          (`Employment shock (baseline)` = unemploy_shock_diff2) +
+                          (`Employment shock (full-time)` = job_seeker_total_shock) +
+                          (`Suicide rate (total)` = suicide_rate) +
+                          (`Suicide rate (female)` = suicide_rate_female) +
+                          (`Suicide rate (male)` = suicide_rate_male) +
+                          (`Unemployment benefit (total)` = unemp_benefit_number_total) +
+                          (`Unemployment benefit (female)` = unemp_benefit_number_female) +
+                          (`Unemployment benefit (male)` = unemp_benefit_number_male) +
+                          (`Unemployment benefit (total, yoy)` = yoy_unemp_benefit_number_total) +
+                          (`Unemployment benefit (female, yoy)` = yoy_unemp_benefit_number_female) +
+                          (`Unemployment benefit (male, yoy)` = yoy_unemp_benefit_number_male) +
+                          (`Emergency Small Ammount Funds` = koguchi_number) +
+                          (`General Support Funds` = sogo_number) +
+                          (`Housing Security Benefit` = jukyo_number) +
+                          (`Public assistance (recipients)` = persons_receive) +
+                          (`Public assistance (households)` = households_receive) +
+                          (`Public assistance (recipients, yoy)` = yoy_persons_receive) +
+                          (`Public assistance (households, yoy)` = yoy_households_receive) +
+                          (`Cumulative infection rate` = infection_rate_cumulative2020jun) +
+                          (`Cumulative death rate` = death_rate_cumulative2020jun) +
+                          (`Google Mobility index` = google_mobility_index_2020may) +
+                          (`Population density` = Population_per_1_km_2_of_inhabitable_area) +
+                          (`Ratio of employees (secondary)` = Secondary_industry_ratio) +
+                          (`Ratio of employees (service)` = Tertiary_industry_ratio) +
+                          (`Elderly dependency rate` = Ratio_of_aged_population) +
+                          (`Total population` = Total_population) ~
+                            N + Mean + (Std.Dev. = SD) + Min + Max, 
+                          label = "tab:summary_stat",
+                          title = "Summary Statistics",
+                          data = df_analysis_desc_stat,
+                          output = 'latex') %>% 
+  kableExtra::pack_rows("Treatment",1,2) %>% 
+  kableExtra::pack_rows("Outcome",3,18) %>% 
+  kableExtra::pack_rows("Covariate",19,26) %>% 
+  kableExtra::add_footnote(c("\\parbox[t]{\\textwidth}{Notes: The employment shock is a cross-section variable calculated based on equation \\eqref{eq:employment_shock}. All the outcome variables are calculated per 100,000 population. For the definition of each variable, see Table \\ref{tab:data_source} in Appendix \\ref{sec:background_info}. Outcome variables such as suicide rates, unemployment benefits, and Public assitance recipients are 21-months data (from January 2019 to September 2020) while the variables of Emergency Small Amount Funds, General Support Funds, and Housing Security Benefit are more restricted due to data limitation. ``yoy'' means year-on-year difference. \\\\
+Sources: See Table \\ref{tab:data_source} in Appendix \\ref{sec:background_info}.}"),threeparttable = TRUE, notation = "none",escape = FALSE)
+
+cat(table_desc_stat, sep = '\n', file = "output/table_summary_stat.tex")
+```
+
+
+# Treatment variation by prefecture/都道府県別の処置変数のグラフ
+
+## Extract one-month data/クロスセクションデータ抽出
+```{r}
+# １月分のデータ抽出
+df_employ_shock <- df_analysis %>% filter(date == "2019-01-01")
+
+```
+
+##  Treatment variable: YOY of diff 2 of unemployment rate
+
+- (2020Q2 - 2019Q4) - (2019Q2 - 2018Q4)
+- (2020年4~6月の値 - 2019年10~12月の値）- (2019年4~6月の値 - 2018年10~12月の値）
+
+```{r}
+g_unemploy_shock <- ggplot2::ggplot(df_employ_shock, aes(x = unemploy_shock_diff2, y =  reorder(prefec, unemploy_shock_diff2))) +
+   geom_bar(stat = "identity") +
+   theme(legend.position = 'none') +
+   theme_light() +
+   labs(title = "(a) Employment shock", x = "Employment shock measured by the unemployment rate",y = "") 
+ggplotly(g_unemploy_shock)
+
+#Extract data / データ抽出
+df_unemploy_shock_diff2 <- df_employ_shock %>%
+  select(prefec_kanji, unemploy_shock_diff2)
+
+# save data as csv for check
+write_excel_csv(df_unemploy_shock_diff2, "output/unemploy_shock_diff2.csv")
+```
+
+# Correlation between two treatments/2変数の相関 by ggplot
+
+## Function for plotting/散布図グラフの関数
+
+```{r}
+scatter_treat_outcome = function(dataset, treat_var, outcome_var, 
+                                 point_size_var, main_title, x_title, y_title){
+  
+dataset %>%
+    ggplot(aes(x = treat_var, y = outcome_var, size = point_size_var, label = prefec)) +
+    geom_point(color = "black", shape = 21, fill = "blue1", alpha = 0.5) +
+    geom_smooth(method = "lm", se = FALSE, color = "gray20", linetype = "dashed") +
+    labs(title = main_title, x = x_title, y = y_title) +
+    theme_classic()  +
+    scale_size(range = c(2,12)) +
+    theme(legend.position = 'none') +
+    geom_vline(xintercept= 0, colour = "gray") +
+    geom_hline(yintercept= 0, colour = "gray")
+}
+```
+
+## Scatter plot/処置変数間の散布図
+
+### Extract data/データ抽出
+```{r}
+df_correlation <- df_analysis %>%
+  dplyr::filter(date == "2020-01-01") %>%
+  dplyr::select(unemploy_shock_diff2, job_seeker_total_shock, population_total, prefec)
+```
+
+### Scatter plot/散布図
+
+- unemployment-rate shock(main) and full-time unemployment-rate shock(alternative)
+- 失業率ショックと有効求職者割合ショック
+
+```{r}
+graph_unemploy_job_seeker_plot <- scatter_treat_outcome(dataset = df_correlation, 
+                      treat_var = df_correlation$unemploy_shock_diff2,
+                      outcome_var = df_correlation$job_seeker_total_shock,
+                      point_size_var = df_correlation$population_total,
+                      main_title = "",
+                      x_title = "Baseline employment shock",
+                      y_title = "''Full-time'' employment shock") +
+                      geom_text_repel(size=3)
+
+ggplotly(graph_unemploy_job_seeker_plot)
+
+# save as PDF
+ggsave(file = "output/graph_unemploy_job_seeker_plot.pdf", plot = graph_unemploy_job_seeker_plot, 
+       dpi = 100, width = 6, height = 5)   
+```
+
+### Check regression
+
+```{r}
+reg1 <- estimatr::lm_robust(job_seeker_total_shock ~ unemploy_shock_diff2, 
+                            data = df_correlation, se_type = "stata")
+
+texreg::screenreg(list(reg1), include.ci = FALSE, digits = 3)
+```
+
+# Correlation between treatment and outcomes/処置変数（失業率ショック, YOY diff2)とアウトカム変数の散布図
+
+- treatment = YOY of diff2 of unemployment rate
+
+## Outcome in July 2020/2020年7月のアウトカム
+
+```{r}
+# 2020.7月分のデータ抽出 for 自殺率YOY）
+df_analysis_2020jul <- df_analysis %>% filter(date == "2020-07-01")
+```
+
+## Scatter plots
+
+- YOY of suicide rate in July 2020(Total, female, male)
+- 自殺 7月YOY(全体、女性、男性)
+
+```{r}
+# 2021Aug17
+# Total / 全体
+graph_unemp_suicide_rate_total <- scatter_treat_outcome(dataset = df_analysis_2020jul, 
+                      treat_var = df_analysis_2020jul$unemploy_shock_diff2,
+                      outcome_var = df_analysis_2020jul$yoy_suicide_rate,
+                      point_size_var = df_analysis_2020jul$population_total,
+                      main_title = "(b) Total suicides",
+                      x_title = "Employment shock measured by the unemployment rate",
+                      y_title = "Change in the suicide rate") +
+                      scale_y_continuous(limits = c(-1.5, 1.5),
+                                         breaks=c(-1.5, -1.0, -0.5, 0.0, 
+                                                  0.5, 1.0, 1.5))
+
+ggplotly(graph_unemp_suicide_rate_total)
+
+# Female / 女性
+graph_unemp_suicide_rate_female <- scatter_treat_outcome(dataset = df_analysis_2020jul, 
+                      treat_var = df_analysis_2020jul$unemploy_shock_diff2,
+                      outcome_var = df_analysis_2020jul$yoy_suicide_rate_female,
+                      point_size_var = df_analysis_2020jul$population_total,
+                      main_title = "(c) Female suicides",
+                      x_title = "Employment shock measured by the unemployment rate",
+                      y_title = "Change in the suicide rate")+
+                      scale_y_continuous(limits = c(-1.5, 1.5),
+                                         breaks=c(-1.5, -1.0, -0.5, 0.0, 
+                                                  0.5, 1.0, 1.5))
+
+
+ggplotly(graph_unemp_suicide_rate_female)
+
+# Male / 男性
+graph_unemp_suicide_rate_male <- scatter_treat_outcome(dataset = df_analysis_2020jul, 
+                      treat_var = df_analysis_2020jul$unemploy_shock_diff2,
+                      outcome_var = df_analysis_2020jul$yoy_suicide_rate_male,
+                      point_size_var = df_analysis_2020jul$population_total,
+                      main_title = "(d) Male suicides",
+                      x_title = "Employment shock measured by the unemployment rate",
+                      y_title = "Change in the suicide rate") +
+                      scale_y_continuous(limits = c(-1.5, 1.5),
+                                         breaks=c(-1.5, -1.0, -0.5, 0.0, 
+                                                  0.5, 1.0, 1.5))
+
+ggplotly(graph_unemp_suicide_rate_male)
+
+# Bind and save scatter plots / 散布図の統合と保存
+
+## bind and save graphs 
+graph_unemp_suicide_bind <-　(g_unemploy_shock + graph_unemp_suicide_rate_total) / (graph_unemp_suicide_rate_female +  graph_unemp_suicide_rate_male)
+
+graph_unemp_suicide_bind 
+
+ggsave(file = "output/graph_unemp_suicide_YOY_Jul.pdf", plot = graph_unemp_suicide_bind, 
+       dpi = 100, width = 12, height = 12)     
+```
+

@@ -1,0 +1,323 @@
+---
+title: "Treatment variables"
+author: ""
+date: "`r Sys.Date()`"
+output:
+ html_document:
+    css : R_style.css
+    # theme: cosmo
+    highlight: haddock     # R script highlight type
+    code_folding: 'hide'  # R code folding type
+    toc: TRUE
+    toc_depth: 3           # Heading depth 
+    toc_float: true        # Heading float (横見出し)
+    number_sections: true # Heading number
+    df_print: paged        # head() output like notebook (good for tibble)）
+    latex_engine: xelatex  # for zxjatype pacakge
+    # fig_height: 4.5          # image size height default
+    # fig_width: 8           # image size width default
+    dev: png
+classoption: xelatex,ja=standard
+editor_options: 
+  chunk_output_type: console
+  
+---
+
+# Setup & directory
+
+```{r setup}
+Sys.setenv(LANG = "en") #English
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list = ls()) # remove objects
+
+# Directory
+path <- getwd()
+
+setwd(path)
+
+# packages
+pacman::p_load(tidyverse, plotly, readxl,scales, extrafont,PerformanceAnalytics, GGally, patchwork, ggpubr, ggrepel, stargazer, labelled)
+
+
+# Font for windows and mac
+if (stringr::str_detect(path, pattern="Users")){ 
+  
+   theme_set(theme_classic(base_size = 10, base_family = "HiraginoSans-W3"))  # For Mac OS
+
+ } else{
+  
+theme_set(theme_classic(base_size = 10, base_family = "Arial")) # For Windows
+   }       
+```
+
+# Main treatment:Unemployment shock/失業率ショック
+
+## Notes for treatment effects/処置変数のメモ
+
+Ignoring random error, prefecture-level unemployment shock can be described as follows:
+
+- Unemployment rate(2018Q4) = Fixed effect + Quarter effect(Q4)  (1)
+
+- Unemployment rate(2019Q2) = Fixed effect + Quarter effect(Q2) (2)
+
+- Unemployment rate(2019Q4) = Fixed effect + Quarter effect(Q4) + Year effect (3)
+
+- Unemployment rate(2020Q2) = Fixed effect + Quarter effect(Q2) + Year effect + COVID shock (4)
+
+Then
+
+Year-on-year (YOY) of two-quarter diff (diff2)
+
+[(4)-(3)] - [(2)- (1)]
+
+= [Quarter effect(Q2) + COVID shock - Quarter effect(Q4)] - [Quarter effect(Q2) - Quarter effect(Q4)]
+
+=COVID shock
+
+or 
+
+two-quarter diff (diff2) of Year-on-year (YOY)
+
+[(4)-(2)] - [(3)- (1)]
+
+= [Year effect + COVID shock] - Year effect
+
+= COVID shock
+
+
+## Labor Force Survey prefecture-level quarterly estimates/労働力調査の都道府県モデル推定値の四半期パネル
+
+- Read dta data, change variable names.
+- dtaを読み込み、変数名を変更する。
+
+```{r}
+# Read Labor Force Survey prefecture-level quarterly estimates / 労働力調査の都道府県モデル推定値の四半期パネルdta読み込み
+panel_labor_force_survey_2016q1_2020q2 <- haven::read_dta("output/panel_労働力調査_2016q1_2020q2.dta")
+
+# Convert to English names / 変数名の変更
+panel_labor_force_survey_2016q1_2020q2 <- panel_labor_force_survey_2016q1_2020q2 %>% 
+  dplyr::rename("labor_force" = "労働力人口",
+                "employ_pop" = "就業者",
+                "unemploy_pop" = "失業者", 
+                "quarter_number" = "time",
+                "year_quarter" = "qrt",
+                "prefec_kanji2" = "都道府県") # suicideデータは”都府県"がないので2とする
+
+
+# Rename the data frame
+df_panel_2016_2020_raw <- panel_labor_force_survey_2016q1_2020q2
+```
+
+## Make a "employment shock" treatment variable/メインの"雇用ショック"処置変数の作成
+
+- We use unemployment-rate shock as a main treatment variable.
+- We also construct the counterpart "shock" variables for labor force participation rate and employment rate, but we do not use them in the paper.
+
+### Construct LFP rate, employment rate, and unemployment rate/労働力率、就業率、失業率を作成
+
+```{r}
+df_panel_2016_2020 <- df_panel_2016_2020_raw %>% 
+  dplyr::mutate(labor_force_rate = (labor_force/pop_over15)*100) %>%  # LFP rate
+  dplyr::mutate(employment_rate = (employ_pop/pop_over15)*100) %>% # employment rate
+  dplyr::mutate(unemployment_rate = (unemploy_pop/labor_force)*100) # unemployment rate 
+```
+
+### Make a year-on-year(YOY) variable/対前年同期差(YOY)の作成
+
+```{r}
+
+## One-year lag and year-on-year/1年ラグ変数および前年同月差の作成
+df_panel_2016_2020_yoy <- df_panel_2016_2020 %>%
+  dplyr::group_by(id, quarterly) %>% #idかつ四半期でグループ化
+  mutate(year_lag_labor_force_rate  = dplyr::lag(labor_force_rate, order_by = year))　%>% #LFP rate, year lag
+  mutate(yoy_labor_force_rate  = labor_force_rate  - year_lag_labor_force_rate) %>%  # year diff (YOY)
+  
+  mutate(year_lag_employment_rate  = dplyr::lag(employment_rate, order_by = year))　%>%   #employment rate, year lag
+  mutate(yoy_employment_rate  = employment_rate  - year_lag_employment_rate) %>%  # year diff (YOY)
+  
+  mutate(year_lag_unemployment_rate  = dplyr::lag(unemployment_rate, order_by = year))　%>%  #unemployment rate, year lag
+  mutate(yoy_unemployment_rate  = unemployment_rate  - year_lag_unemployment_rate) %>%  # year diff (YOY)
+  dplyr::ungroup()
+
+## Visual check / 目視でcheck
+df_panel_2016_2020_check <- df_panel_2016_2020_yoy %>% 
+  dplyr::select(id, year,quarterly, 
+         labor_force_rate, year_lag_labor_force_rate, yoy_labor_force_rate,
+         employment_rate, year_lag_employment_rate, yoy_employment_rate,
+         unemployment_rate, year_lag_unemployment_rate, yoy_unemployment_rate)
+```
+
+### Year-on-year (YOY) diff / 対前年同期差(YOY)データの階差(diff)データ作成
+
+- year-on-year diff (two-quarter diff)
+- two-quarter diff of YOY = YOY of two-quarter diff
+- 2期diffデータをprefectureで作成（処置変数の作成）
+- yoyの2期diff = 2期diffのyoyとも解釈できる
+
+```{r}
+## lag2 & diff2 
+df_panel_2016_2020_yoy_diff <- df_panel_2016_2020_yoy %>%
+  dplyr::group_by(id) %>%　　# idでグループ化
+  dplyr::mutate(yoy_lag2_labor_force_rate = lag(yoy_labor_force_rate, order_by = quarter_number, n = 2)) %>% # labor force, lag2 of yoy 
+  dplyr::mutate(yoy_diff2_labor_force_rate = yoy_labor_force_rate - yoy_lag2_labor_force_rate) %>% # two-quarter diff of yoy
+  
+  dplyr::mutate(yoy_lag2_employment_rate = lag(yoy_employment_rate, order_by = quarter_number, n = 2)) %>% # employment rate, lag2 of yoy
+  dplyr::mutate(yoy_diff2_employment_rate = yoy_employment_rate - yoy_lag2_employment_rate) %>% # two-quarter diff of yoy
+  
+  dplyr::mutate(yoy_lag2_unemployment_rate=lag(yoy_unemployment_rate, order_by = quarter_number, n = 2)) %>% #unemployment rate,[] lag2 of yoy
+  dplyr::mutate(yoy_diff2_unemployment_rate = yoy_unemployment_rate - yoy_lag2_unemployment_rate) %>% # two-quarter diff of yoy
+   dplyr::ungroup()
+```
+
+
+### Cross-sectional treatment variable/処置変数クロスセクションデータの作成（2020Q2）
+
+- Focus on the unemployment shock in 2020Q2
+
+```{r}
+df_emp_shock2020Q2 <- df_panel_2016_2020_yoy_diff %>%
+  dplyr::select(prefec_kanji2, prefecture, id, quarter_number, 
+                year_quarter, year, quarterly, pop_over15, 
+                yoy_diff2_unemployment_rate) %>% # YOY diff2
+  dplyr::filter(year_quarter == "2020q2")
+```
+
+
+# Alternative treatment:Full-time unemployment shock/有効求職者率ショック
+
+- Read the data of job seeker for full-time job.
+- Read also jobs-to-applicant ratio, but it is not used for analysis.
+- 有効求職者数データを取り込む
+- 有効求人倍率も含まれているが、分析には未使用
+
+## Read and modify full-time-job seeker data (Stata dta)/有効求職者数（Stata dtaデータ）の読み込みと修正
+
+```{r}
+# Read dta data / 求人・求職データの取り込み
+panel_kyujin_kyushoku <- haven::read_dta("output/panel_suicide_kyujin.dta") #201206
+
+# Make "date" variables / date変数作成
+panel_kyujin_kyushoku <- panel_kyujin_kyushoku %>%
+  mutate(date = as.Date(stringr::str_c(year, month, "01", sep = "-")))
+
+# Convert to English names 変数名の英語化 #2021Jan29Waki 自殺者英語名変更
+# 性別のものは「パートタイムを除く一般」であり、合計は「パートタイムを除く常用」。「常用」は性別のものはなし
+panel_kyujin_kyushoku <- panel_kyujin_kyushoku %>% 
+  dplyr::rename("prefec_kanji" = "都道府県", # prefecture, chinese charactoer
+                "kyujin_bairitsu" = "有効求人倍率", # job-to-applicant ratio (not used)
+                "job_seeker_male" = "有効求職者数_男",　# without part-time workers/「パートタイムを除く一般（男）」
+                "job_seeker_female" = "有効求職者数_女", # without part-time workers/「パートタイムを除く一般（女）」
+                "job_seeker_total" = "有効求職者数_パート除く常用") # without part-time workers /「パートタイムを除く常用」
+
+# Delete "都府県" and spaces /"都道府県名の漢字から"都府県"の削除と空白（2020年9月にある）の削除
+panel_kyujin_kyushoku <- panel_kyujin_kyushoku %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "県", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji,  "府", "")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "東京都", "東京")) %>%
+  mutate(prefec_kanji = stringr::str_replace(prefec_kanji, "　", ""))
+```
+
+
+## "Full-time" unemployment shock/有効求職者数の処置変数の作成
+
+- Construct employment shock variables, total and by gender
+- Use only "total" for an alternative treatment variable
+- 合計および男女別で作成
+- 実際には合計のみ使用。（男女別の場合、それぞれの相関があるので、処置変数としてどう解釈すればいいのかやや微妙）
+
+
+### Convert monthly panel to quarterly panel/月次パネルの四半期パネルへの変換
+```{r}
+# Extract job-seeker panel data / 有効求職者数用のパネルデータ抽出
+panel_job_seeker <- panel_kyujin_kyushoku %>%
+  dplyr::select(prefec_kanji, id, month, date, year, 
+                job_seeker_total, job_seeker_female, job_seeker_male) %>% 
+  remove_var_label() # Remove stata label/有効求職者数（実数）というstataラベルの除去（新変数にもラベルが残るため）
+
+# Note: 有効求職者数の合計=> パート含む一般をdtaに直接参入（21.03.24)　=>パート外したいので復活（21.3.26) => パート除く常用をdtaに直接参入(21.3.26)
+
+# quarterly label / 四半期ラベル
+panel_job_seeker <- panel_job_seeker %>% 
+  dplyr::mutate(quarterly = dplyr::case_when(
+    month == 3 ~ "q1", 
+    month == 6 ~ "q2", 
+    month == 9 ~ "q3",
+    month == 12 ~ "q4"))
+
+# Keep qaurterly / 四半期のみのこす
+panel_job_seeker <- panel_job_seeker %>% tidyr::drop_na(quarterly)
+```
+
+### Make a "shock" variable / 有効求職者数割合変数などの作成
+
+- Full-time unemployment rate = full-time unemployees/labor force
+- 有効求職者数割合＝有効求職者数/労働力の四半期データ
+
+```{r}
+# 労働力と失業者数が入ったデータを統合
+
+panel_job_seeker <- panel_job_seeker %>%
+    dplyr::left_join(df_panel_2016_2020, by = c("id", "year", "quarterly")) %>%
+    tidyr::drop_na(quarter_number) # のちにorder_by=quarter_numberするときにNAのこすとそこにlag値が入ってしまうため
+ 
+# labor_forceとunemploy_popの単位は「千人」なので、有効求職者の「人」とそろえる 2021Mar16 
+## 労働力調査　https://www.stat.go.jp/data/roudou/pref/index.html
+
+panel_job_seeker <- panel_job_seeker　 %>% 
+  dplyr::mutate(labor_force = labor_force*1000) %>%  
+  dplyr::mutate(unemploy_pop = unemploy_pop*1000)  # not used in the paper
+
+# Employshockの元となる変数の作成の作成
+# もともと3ヵ月平均（job_seeker_total_average)を使っていたが、2020年の4月5月の緊急事態宣言時にパートタイムの求職者数が減っているため（角谷論説@RIETI参照）6月データを利用
+panel_job_seeker <- panel_job_seeker %>%
+    dplyr::mutate(job_seeker_total_rate = (job_seeker_total/labor_force)*100)  #有効求職者数割合
+   
+# One-year lag and year-on-year / 1年ラグ変数および前年同月差(YOY)の作成
+panel_job_seeker_yoy <- panel_job_seeker %>%
+  dplyr::group_by(id, month) %>% # group by id and month / idかつ月でグループ化
+  mutate(year_lag_job_seeker_total_rate = dplyr::lag(job_seeker_total_rate, order_by = year)) %>% # year lag 
+  mutate(yoy_job_seeker_total_rate  = job_seeker_total_rate - year_lag_job_seeker_total_rate) %>% # YOY
+  dplyr::ungroup() 
+
+
+# diff2 of yoy / yoyのdiff2(2期前の四半期を引く）
+panel_job_seeker_yoy_diff2 <- panel_job_seeker_yoy %>%
+  dplyr::group_by(id) %>%　　# idでグループ化
+  dplyr::mutate(yoy_lag2_job_seeker_total_rate = lag(yoy_job_seeker_total_rate, order_by = quarter_number, n = 2)) %>% # lag2 
+  dplyr::mutate(yoy_diff2_job_seeker_total_rate = yoy_job_seeker_total_rate - yoy_lag2_job_seeker_total_rate) %>% # diff2
+  dplyr::ungroup() 
+
+# Extract as a cross-section data / 作成したデータを2020年のQ2のクロスセクションデータで抽出
+panel_job_seeker_yoy_diff2_2020q2 <- panel_job_seeker_yoy_diff2 %>% 
+  dplyr::filter(year_quarter == "2020q2") 
+
+# Extract only necessary variables / 後で結合するときに変数が重複しないように変数を抽出
+df_job_seeker_yoy_diff2_2020q2 <-panel_job_seeker_yoy_diff2_2020q2 %>%
+  dplyr::select(id,
+                job_seeker_total, job_seeker_total_rate, #有効求職者数割合
+                yoy_job_seeker_total_rate,
+                yoy_diff2_job_seeker_total_rate) 
+
+# Data check / データチェック 2021Aug17
+panel_job_seeker_yoy_diff2_2020q2 %>% dplyr::select(id,
+                job_seeker_total, job_seeker_total_rate, #有効求職者数割合
+                yoy_job_seeker_total_rate,
+                yoy_diff2_job_seeker_total_rate)
+```
+
+# Join "full-time" employment shock (treatment) variables to the original df/処置ショックの統合
+
+```{r}
+df_emp_shock2020Q2 <- df_emp_shock2020Q2 %>%
+  left_join(df_job_seeker_yoy_diff2_2020q2, by = "id")  # 2020.06. diff 5 month (jun-dec), main. #2020dec22
+```
+
+# Save treatment variables/処置変数データの保存
+
+```{r}
+df_emp_shock2020Q2 %>%  write_csv("output/df_emp_shock2020Q2.csv")
+```
+
